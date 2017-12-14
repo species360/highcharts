@@ -21,7 +21,8 @@ Highcharts.chart('columnChart', {
                 y: 29.9,
                 sonification: {
                     startTime: 0,
-                    pan: -1
+                    pan: -1,
+                    duration: 4
                 }
             }, {
                 x: 1,

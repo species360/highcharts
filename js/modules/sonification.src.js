@@ -58,6 +58,11 @@ H.Series.prototype.sonify = function (callback) {
 			options.maxDuration / numPoints, 
 			options.maxPointDuration
 		),
+		timePerX = options.maxDuration /
+			(
+				(series.xAxis.dataMax || Math.max.apply(null, series.xData)) -
+				(series.xAxis.dataMin || Math.min.apply(null, series.xData))
+			) / 1000,
 		maxPointsNum = options.maxDuration / options.minPointDuration,
 		pointSkip = 1,
 		panStep = 2 * options.stereoRange / numPoints,
@@ -65,20 +70,21 @@ H.Series.prototype.sonify = function (callback) {
 		endTime,
 		queuePlay = function (freq, vol, start, end, pan) {
 			// Fade in and out for this note
-			gainNode.gain.setTargetAtTime(
-				vol, 
-				start, 
-				(end - start) * options.startRampTime
-			);
+			if (
+				options.endRampTime !== false &&
+				options.startRampTime !== false
+			) {
+				gainNode.gain.setTargetAtTime(vol, start,
+					end ? (end - start) * options.startRampTime : 0);
+			}
 			oscillator.frequency[
 				options.smooth ?
 				'linearRampToValueAtTime' : 'setValueAtTime'
 			](freq,	start);
-			gainNode.gain.setTargetAtTime(
-				0,
-				end,
-				(end - start) * options.endRampTime
-			);
+			if (end && options.endRampTime !== false) {
+				gainNode.gain.setTargetAtTime(0, end,
+					(end - start) * options.endRampTime);
+			}
 			if (options.stereo) {
 				panNode.pan.setValueAtTime(pan, start);
 			}
@@ -122,14 +128,23 @@ H.Series.prototype.sonify = function (callback) {
 						startTime + timePerPoint / 1000
 					);
 				} else {
-					
+					// Start time not defined in musical mode, we set it from
+					// x value. Duration is either specified in options or null
+					// to continue until next point.
+					startTime = H.audio.currentTime + (
+						point.x -
+							(
+								series.xAxis.dataMin ||
+								Math.min.apply(null, series.xData)
+							) + 1
+					) * timePerX;
+					endTime = pointOpts.duration &&
+						startTime + pointOpts.duration || null;
 				}
 			} else {
 				startTime = H.audio.currentTime + i * timePerPoint / 1000;
 				endTime = startTime + timePerPoint / 1000;
 			}
-
-			console.log(startTime, endTime);
 
 			queuePlay(
 				pointOpts.frequency || valueToFreq(point.y),
@@ -149,7 +164,7 @@ H.Series.prototype.sonify = function (callback) {
 	}
 
 	// Stop oscillator
-	oscillator.stop(endTime + 1);
+	oscillator.stop((endTime || startTime) + 1);
 
 	oscillator.onended = function () {
 		delete series.oscillator;
@@ -206,8 +221,8 @@ H.setOptions({
 		maxPointDuration: 300, // In ms
 		minFrequency: 100,
 		maxFrequency: 2400,
-		startRampTime: 1, // Volume ramp for each note (factor of duration)
-		endRampTime: 1,
+		startRampTime: false, // Volume ramp for each note (factor of duration)
+		endRampTime: false, // Keep going indefinitely
 		waveType: 'sine',
 		// mode: 'musical' to make point playtime correspond to x val, or use
 		// point.sonification.duration and .startTime
@@ -215,7 +230,7 @@ H.setOptions({
 		smooth: false, // Glide to next note frequency
 		stereo: true, // Note: Panning might not be accessible to mono users
 		stereoRange: 0.8, // Factor to apply to stereo range
-		volume: 0.9
+		volume: 0.9 // Factor
 	}
 });
 /*
