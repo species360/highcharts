@@ -1,5 +1,5 @@
 /**
- * (c) 2010-2016 Torstein Honsi
+ * (c) 2010-2017 Torstein Honsi
  *
  * License: www.highcharts.com/license
  *
@@ -9,8 +9,8 @@
 'use strict';
 import Highcharts from '../parts/Globals.js';
 Highcharts.theme = {
-	colors: ['#DDDF0D', '#55BF3B', '#DF5353', '#7798BF', '#aaeeee', '#ff0066', '#eeaaee',
-		'#55BF3B', '#DF5353', '#7798BF', '#aaeeee'],
+	colors: ['#DDDF0D', '#55BF3B', '#DF5353', '#7798BF', '#aaeeee',
+		'#ff0066', '#eeaaee', '#55BF3B', '#DF5353', '#7798BF', '#aaeeee'],
 	chart: {
 		backgroundColor: {
 			linearGradient: { x1: 0, y1: 0, x2: 1, y2: 1 },

@@ -1,5 +1,5 @@
 /**
- * (c) 2010-2016 Torstein Honsi
+ * (c) 2010-2017 Torstein Honsi
  *
  * License: www.highcharts.com/license
  */
@@ -35,10 +35,12 @@ Axis.prototype.getTimeTicks = function (normalizedInterval, min, max, startOfWee
 		higherRanks = {},
 		useUTC = defaultOptions.global.useUTC,
 		minYear, // used in months and years as a basis for Date.UTC()
-		minDate = new Date(min - Math.abs(getTZOffset(min))), // #6278
+		// When crossing DST, use the max. Resolves #6278.
+		minDate = new Date(min - Math.max(getTZOffset(min), getTZOffset(max))),
 		makeTime = Date.hcMakeTime,
 		interval = normalizedInterval.unitRange,
 		count = normalizedInterval.count,
+		baseOffset, // #6797
 		variableDayLength;
 
 	if (defined(min)) { // #1300
@@ -90,15 +92,17 @@ Axis.prototype.getTimeTicks = function (normalizedInterval, min, max, startOfWee
 			minDateDate = minDate[Date.hcGetDate](),
 			minHours = minDate[Date.hcGetHours]();
 		
+		// Redefine min to the floored/rounded minimum time (#7432)
+		min = minDate.getTime();
 
 		// Handle local timezone offset
-		if (Date.hcTimezoneOffset || Date.hcGetTimezoneOffset) {
+		if (Date.hcHasTimeZone) {
 
 			// Detect whether we need to take the DST crossover into
 			// consideration. If we're crossing over DST, the day length may be
 			// 23h or 25h and we need to compute the exact clock time for each
 			// tick instead of just adding hours. This comes at a cost, so first
-			// we found out if it is needed. #4951.
+			// we find out if it is needed (#4951).
 			variableDayLength =
 				(!useUTC || !!Date.hcGetTimezoneOffset) &&
 				(
@@ -110,8 +114,8 @@ Axis.prototype.getTimeTicks = function (normalizedInterval, min, max, startOfWee
 				);
 
 			// Adjust minDate to the offset date
-			minDate = minDate.getTime();
-			minDate = new Date(minDate + getTZOffset(minDate));
+			baseOffset = getTZOffset(minDate);
+			minDate = new Date(min + baseOffset);
 		}
 		
 
@@ -131,12 +135,18 @@ Axis.prototype.getTimeTicks = function (normalizedInterval, min, max, startOfWee
 
 			// if we're using global time, the interval is not fixed as it jumps
 			// one hour at the DST crossover
-			} else if (variableDayLength && (interval === timeUnits.day || interval === timeUnits.week)) {
+			} else if (
+					variableDayLength &&
+					(interval === timeUnits.day || interval === timeUnits.week)
+				) {
 				time = makeTime(minYear, minMonth, minDateDate +
 					i * count * (interval === timeUnits.day ? 1 : 7));
 
 			} else if (variableDayLength && interval === timeUnits.hour) {
-				time = makeTime(minYear, minMonth, minDateDate, minHours + i * count);
+				// corrected by the start date time zone offset (baseOffset)
+				// to hide duplicated label (#6797)
+				time = makeTime(minYear, minMonth, minDateDate, minHours +
+					i * count, 0, 0, baseOffset) - baseOffset;
 
 			// else, the interval is fixed and we use simple addition
 			} else {

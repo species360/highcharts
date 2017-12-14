@@ -1,5 +1,5 @@
 /**
- * (c) 2010-2016 Torstein Honsi
+ * (c) 2010-2017 Torstein Honsi
  *
  * License: www.highcharts.com/license
  */
@@ -79,7 +79,9 @@ Axis.prototype.getLogTickPositions = function (interval, min, max, minor) {
 	} else {
 		var realMin = lin2log(min),
 			realMax = lin2log(max),
-			tickIntervalOption = options[minor ? 'minorTickInterval' : 'tickInterval'],
+			tickIntervalOption = minor ? 
+				this.getMinorTickInterval() : 
+				options.tickInterval,
 			filteredTickIntervalOption = tickIntervalOption === 'auto' ? null : tickIntervalOption,
 			tickPixelIntervalOption = options.tickPixelInterval / (minor ? 5 : 1),
 			totalPixelLength = minor ? axisLength / axis.tickPositions.length : axisLength;

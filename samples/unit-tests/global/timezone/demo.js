@@ -67,6 +67,14 @@ QUnit.test('timezone', function (assert) {
         '01:00',
         'From October 27, UTC midnight is 01:00 AM in Oslo'
     );
+
+    // Tear down
+    Highcharts.setOptions({
+        global: {
+            timezone: null,
+            getTimezoneOffset: null
+        }
+    });
 });
 
 /**
@@ -136,6 +144,14 @@ QUnit.test('getTimezoneOffset', function (assert) {
         '01:00',
         'From October 27, UTC midnight is 01:00 AM in Oslo'
     );
+
+    // Reset
+    Highcharts.setOptions({
+        global: {
+            getTimezoneOffset: null
+        }
+    });
+
 });
 
 QUnit.test('Crossing over DST with hourly ticks (#6278)', function (assert) {
@@ -196,4 +212,104 @@ QUnit.test('Crossing over DST with hourly ticks (#6278)', function (assert) {
         'Ticks before DST crossover'
     );
 
+    Highcharts.setOptions({
+        global: {
+            useUTC: true,
+            timezone: null
+        }
+    });
+
+});
+
+QUnit.test('Negative timezoneOffset', function (assert) {
+    Highcharts.setOptions({
+        global: {
+            timezoneOffset: -3 * 60
+        }
+    });
+
+    var chart = Highcharts.chart('container', {
+        chart: {
+            width: 400
+        },
+        xAxis: {
+            type: 'datetime'
+        },
+        series: [{
+            data: [{
+                x: 1493031600000,
+                y: 39.9
+            }, {
+                x: 1493031630000,
+                y: 81.5
+            }]
+        }]
+    });
+
+    var ticks = chart.xAxis[0].tickPositions
+        .map(function (pos) {
+            return chart.xAxis[0].ticks[pos].label.element.textContent;
+        });
+
+    assert.deepEqual(
+        ticks,
+        ['14:00:00', '14:00:30'],
+        'Two ticks'
+    );
+
+    // Reset
+    Highcharts.setOptions({
+        global: {
+            timezoneOffset: null
+        }
+    });
+
+});
+
+QUnit.test('Crossing DST with a wide pointRange (#7432)', function (assert) {
+    Highcharts.setOptions({
+        global: {
+            timezone: 'Europe/Copenhagen'
+        }
+    });
+
+    var chart = Highcharts.chart('container', {
+        chart: {
+            type: 'column',
+            width: 600
+        },
+        xAxis: {
+            type: 'datetime',
+            labels: {
+                format: '{value:%Y-%m-%d<br>%H:%M}'
+            }
+        },
+        series: [{
+            data: [
+                [Date.UTC(2017, 9, 29, 23), 10],
+                [Date.UTC(2017, 9, 30, 23), 8]
+            ]
+        }]
+    });
+
+    assert.notEqual(
+        chart.xAxis[0].ticks[chart.xAxis[0].tickPositions[0]].label.element
+            .textContent.indexOf('00:00'),
+        -1,
+        'Tick should land on midnight'
+    );
+    assert.notEqual(
+        chart.xAxis[0].ticks[chart.xAxis[0].tickPositions[1]].label.element
+            .textContent.indexOf('00:00'),
+        -1,
+        'Tick should land on midnight'
+    );
+
+
+
+    Highcharts.setOptions({
+        global: {
+            timezone: null
+        }
+    });
 });

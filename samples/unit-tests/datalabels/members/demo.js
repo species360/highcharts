@@ -15,7 +15,11 @@ QUnit.test('Series.drawDataLabels', function (assert) {
                 d.aligned = true;
             },
             chart: {
+                options: {
+                    drilldown: {}
+                },
                 renderer: {
+                    getContrast: H.Renderer.prototype.getContrast,
                     label: function () {
                         return {
                             attribs: {},
@@ -39,7 +43,7 @@ QUnit.test('Series.drawDataLabels', function (assert) {
                     }
                 }
             },
-            options: defaultOptions.plotOptions.line,
+            options: H.merge(defaultOptions.plotOptions.line),
             plotGroup: function () {
                 return {
                     attr: noop

@@ -29,8 +29,8 @@ function getData(n) {
     }
     return arr;
 }
-var data1 = getData(50000),
-    data2 = getData(50000);
+var data1 = getData(25000),
+    data2 = getData(25000);
 
 console.time('area');
 Highcharts.chart('container', {
@@ -40,12 +40,16 @@ Highcharts.chart('container', {
         zoomType: 'x'
     },
 
+    boost: {
+        useGPUTranslations: true
+    },
+
     title: {
-        text: 'Trimmed Highcharts drawing ' + (data1.length + data2.length) + ' points'
+        text: 'Highcharts drawing ' + (data1.length + data2.length) + ' points'
     },
 
     subtitle: {
-        text: 'Using the experimental Highcharts Boost module'
+        text: 'Using the Boost module'
     },
 
     tooltip: {

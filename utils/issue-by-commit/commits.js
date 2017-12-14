@@ -67,7 +67,7 @@ function drawGraph() {
 			[], [], [], [], [], [], [], [], [], [], [], [], [], [], [], []
 		];
 
-		graphs.forEach(function (graph, g) {
+		Highcharts.each(graphs, function (graph, g) {
 			for (var strpos = 0; strpos < graph.length; strpos += 2) {
 				var pos = strpos / 2,
 					operator = graph.substr(strpos, 2),
@@ -146,7 +146,7 @@ function drawGraph() {
 	});
 
 
-	paths.concat(closedPaths).forEach(function (path, i) {
+	Highcharts.each(paths.concat(closedPaths), function (path, i) {
 		ren.path(path)
 			.attr({
 				'stroke-width': 2,
@@ -343,8 +343,8 @@ $(function() {
 					})
 					.click(function() {
 						$active && $active.removeClass('active').addClass('visited');
-						$(this).addClass('active');
-						$active = $(this);
+						$active = $(this).parent();
+						$active.addClass('active');
 					})
 					.html(message)
 					.appendTo($li);
@@ -383,7 +383,7 @@ $(function() {
 					})
 					.appendTo($li);
 
-				$('<span class="date">' + date + '</span>')
+				$('<span class="date">' + (date || '&nbsp;') + '</span>')
 					.css({
 						marginLeft: 20 + 10 * indentLevel
 					})

@@ -36,15 +36,21 @@ Highcharts.chart('container', {
 
     chart: {
         type: 'area',
-        zoomType: 'x'
+        zoomType: 'x',
+        panning: true,
+        panKey: 'shift'
+    },
+
+    boost: {
+        useGPUTranslations: true
     },
 
     title: {
-        text: 'Trimmed Highcharts drawing ' + data.length + ' points'
+        text: 'Highcharts drawing ' + data.length + ' points'
     },
 
     subtitle: {
-        text: 'Using the experimental Highcharts Boost module'
+        text: 'Using the Boost module'
     },
 
     tooltip: {

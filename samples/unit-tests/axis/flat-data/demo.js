@@ -6,6 +6,10 @@
 QUnit.test('Line series', function (assert) {
 
     var chart = Highcharts.chart('container', {
+        chart: {
+            width: 600,
+            height: 250
+        },
         series: [{
             data: [1.333333333, 1.333333333]
         }]
@@ -24,7 +28,14 @@ QUnit.test('Line series', function (assert) {
     assert.strictEqual(
         chart.yAxis[0].tickPositions.toString(),
         '1,2',
-        'Now two ticks'
+        'Now two ticks (#6274)'
+    );
+
+    chart.series[0].setData([1, 1]);
+    assert.strictEqual(
+        chart.yAxis[0].tickPositions.toString(),
+        '1',
+        'Now one tick (#6563)'
     );
 
 });
@@ -32,6 +43,10 @@ QUnit.test('Line series', function (assert) {
 QUnit.test('Column series, inferred threshold', function (assert) {
 
     var chart = Highcharts.chart('container', {
+        chart: {
+            width: 600,
+            height: 250
+        },
         series: [{
             data: [1.333333333, 1.333333333],
             type: 'column'

@@ -12,16 +12,20 @@ for (i = 0; i < n; i += 1) {
 }
 
 if (!Highcharts.Series.prototype.renderCanvas) {
-    console.error('Module not loaded');
-    return;
+    throw 'Module not loaded';
 }
 
 console.time('scatter');
-console.time('asyncRender');
 Highcharts.chart('container', {
 
     chart: {
-        zoomType: 'xy'
+        zoomType: 'xy',
+        height: '100%'
+    },
+
+    boost: {
+        useGPUTranslations: true,
+        usePreAllocated: true
     },
 
     xAxis: {
@@ -35,18 +39,24 @@ Highcharts.chart('container', {
         min: 0,
         max: 100,
         minPadding: 0,
-        maxPadding: 0
+        maxPadding: 0,
+        title: {
+            text: null
+        }
     },
 
     title: {
         text: 'Scatter chart with ' + Highcharts.numberFormat(data.length, 0, ' ') + ' points'
     },
+
     legend: {
         enabled: false
     },
+
     series: [{
         type: 'scatter',
-        color: 'rgba(152,0,67,0.1)',
+        color: 'rgb(152, 0, 67)',
+        fillOpacity: 0.1,
         data: data,
         marker: {
             radius: 1
@@ -54,11 +64,6 @@ Highcharts.chart('container', {
         tooltip: {
             followPointer: false,
             pointFormat: '[{point.x:.1f}, {point.y:.1f}]'
-        },
-        events: {
-            renderedCanvas: function () {
-                console.timeEnd('asyncRender');
-            }
         }
     }]
 
