@@ -23,30 +23,29 @@ H.audio = new (H.win.AudioContext || H.win.webkitAudioContext)();
 // Stolen from Accessibility module
 H.Point.prototype.highlight = function () {
 	var chart = this.series.chart;
-	if (this.graphic && this.graphic.element.focus) {
-		this.graphic.element.focus();
-	}
 	if (!this.isNull) {
-		this.onMouseOver(); // Show the hover marker
-		// Show the tooltip
-		if (chart.tooltip) {
-			chart.tooltip.refresh(chart.tooltip.shared ? [this] : this);
-		}
+		this.onMouseOver(); // Show the hover marker and tooltip
 	} else {
 		if (chart.tooltip) {
 			chart.tooltip.hide(0);
 		}
 		// Don't call blur on the element, as it messes up the chart div's focus
 	}
+
 	chart.highlightedPoint = this;
 	return this;
 };
 
-H.Series.prototype.sonify = function (options, callback) {
+
+H.Series.prototype.sonify = function (callback) {
 	var gainNode = H.audio.createGain(),
 		panNode = H.audio.createStereoPanner(),
 		oscillator = H.audio.createOscillator(),
 		series = this,
+		options = merge(
+			this.chart.options.sonification,
+			this.options.sonification
+		),
 		numPoints = series.points.length,
 		valueToFreq = function (val) {
 			var valMin = series.yAxis && series.yAxis.dataMin || series.dataMin,
@@ -61,11 +60,36 @@ H.Series.prototype.sonify = function (options, callback) {
 		),
 		maxPointsNum = options.maxDuration / options.minPointDuration,
 		pointSkip = 1,
-		panStep = 2 * options.stereoRange / numPoints;
+		panStep = 2 * options.stereoRange / numPoints,
+		startTime,
+		endTime,
+		queuePlay = function (freq, vol, start, end, pan) {
+			// Fade in and out for this note
+			gainNode.gain.setTargetAtTime(
+				vol, 
+				start, 
+				(end - start) * options.startRampTime
+			);
+			oscillator.frequency[
+				options.smooth ?
+				'linearRampToValueAtTime' : 'setValueAtTime'
+			](freq,	start);
+			gainNode.gain.setTargetAtTime(
+				0,
+				end,
+				(end - start) * options.endRampTime
+			);
+			if (options.stereo) {
+				panNode.pan.setValueAtTime(pan, start);
+			}
+		};
+
+	series.isSonifying = true;
+	series.oscillator = oscillator;
 
 	// Skip over points if we have too many
 	// We might want to use data grouping here
-	if (timePerPoint < options.minPointDuration) {
+	if (options.mode !== 'musical' && timePerPoint < options.minPointDuration) {
 		pointSkip = Math.ceil(numPoints / maxPointsNum);
 		timePerPoint = options.minPointDuration;
 	}
@@ -81,64 +105,99 @@ H.Series.prototype.sonify = function (options, callback) {
 
 	// Play
 	oscillator.start(H.audio.currentTime);
-	for (var i = 0, point, timeOffset; i < numPoints; i += pointSkip) {
+	series.sonifyTimeouts = [];
+	for (var i = 0, point, pointOpts; i < numPoints; i += pointSkip) {
 		point = this.points[i];
 		if (point) {
-			timeOffset = i * timePerPoint / 1000;
-			oscillator.frequency[
-				options.smooth ?
-				'linearRampToValueAtTime' : 'setValueAtTime'
-			](
-				valueToFreq(point.y),
-				H.audio.currentTime + timeOffset
-			);
-
-			if (options.stereo) {
-				panNode.pan.setValueAtTime(
-					-1 * options.stereoRange + panStep * i,
-					H.audio.currentTime + timeOffset
-				);
+			pointOpts = merge(options, point.options.sonification);
+			if (options.mode === 'musical') {
+				if (pointOpts.startTime !== undefined) {
+					startTime = H.audio.currentTime + pointOpts.startTime;
+					endTime = (
+						pointOpts.duration && startTime + pointOpts.duration ||
+						this.points[i + 1] &&
+						this.points[i + 1].options.sonification &&
+						H.audio.currentTime +
+							this.points[i + 1].options.sonification.startTime ||
+						startTime + timePerPoint / 1000
+					);
+				} else {
+					
+				}
+			} else {
+				startTime = H.audio.currentTime + i * timePerPoint / 1000;
+				endTime = startTime + timePerPoint / 1000;
 			}
 
-			setTimeout((function (point) {
+			console.log(startTime, endTime);
+
+			queuePlay(
+				pointOpts.frequency || valueToFreq(point.y),
+				pointOpts.volume,
+				startTime,
+				endTime,
+				pointOpts.pan * options.stereoRange ||
+					(-1 * options.stereoRange + panStep * i)
+			);
+
+			series.sonifyTimeouts.push(setTimeout((function (point) {
 				return function () {
 					point.highlight();
 				};
-			}(point)), timeOffset * 1000);
+			}(point)), (startTime - H.audio.currentTime) * 1000));
 		}
 	}
 
-	// Fade and stop oscillator
-	gainNode.gain.setTargetAtTime(
-		0,
-		H.audio.currentTime + i * timePerPoint / 1000, 
-		0.1
-	);
-	oscillator.stop(H.audio.currentTime + i * timePerPoint / 1000 + 1);
+	// Stop oscillator
+	oscillator.stop(endTime + 1);
 
 	oscillator.onended = function () {
+		delete series.oscillator;
+		delete series.sonifyTimeouts;
+		series.isSonifying = false;
 		callback.call(series);
 	};
 };
 
+// Start/stop sonification
 H.Chart.prototype.sonify = function () {
-	var options = this.options.sonification;
+	var options = this.options.sonification,
+		chartIsSonifying = H.reduce(this.series, function (acc, cur) {
+			return acc || cur.isSonifying;
+		}, false);
 
-	if (this.series[0]) {
-		this.series[0].sonify(options, function sonifyNext() {
-			var newSeries = this.chart.series[this.index + 1],
-				opts;
-			if (newSeries) {
-				opts = merge(options, newSeries.options.sonification);
+	if (chartIsSonifying) {
+		H.each(this.series, function (series) {
+			if (series.oscillator) {
+				series.oscillator.onended = function () {};
+				series.oscillator.stop();
+				delete series.oscillator;
+				series.isSonifying = false;
+			}
+			if (series.sonifyTimeouts) {
+				H.each(series.sonifyTimeouts, function (timeoutId) {
+					clearTimeout(timeoutId);
+				});
+				delete series.sonifyTimeouts;
+			}
+		});
+	} else if (this.series[0]) {
+		this.series[0].sonify(function sonifyNext() {
+			var newSeries = this.chart.series[this.index + 1];
+			if (newSeries && !this.chart.isCancellingSonify) {
 				setTimeout(function () {
-					newSeries.sonify(options, sonifyNext);
-				}, opts.seriesDelay);
+					newSeries.sonify(sonifyNext);
+				}, H.pick(
+					newSeries.options.sonification &&
+					newSeries.options.sonification.seriesDelay,
+					options.seriesDelay
+				));
 			}
 		});
 	}
 };
 
-// Default sonification options
+// Default sonification options, also available per series
 H.setOptions({
 	sonification: {
 		seriesDelay: 800, // Delay between series in ms
@@ -147,13 +206,29 @@ H.setOptions({
 		maxPointDuration: 300, // In ms
 		minFrequency: 100,
 		maxFrequency: 2400,
+		startRampTime: 1, // Volume ramp for each note (factor of duration)
+		endRampTime: 1,
 		waveType: 'sine',
-		smooth: false,
+		// mode: 'musical' to make point playtime correspond to x val, or use
+		// point.sonification.duration and .startTime
+		mode: 'normal',
+		smooth: false, // Glide to next note frequency
 		stereo: true, // Note: Panning might not be accessible to mono users
 		stereoRange: 0.8, // Factor to apply to stereo range
 		volume: 0.9
 	}
 });
+/*
+	point: {
+		sonification: {
+			pan: 0, // -1 to 1. Requires stereo:true. stereoRange factor applies
+			duration: 0, // Requires mode: 'musical'
+			startTime: 0, // Requires mode: 'musical' - start offset in sec
+			volume: 0,
+			frequency: 0
+		}
+	}
+*/
 
 // Add option to export menu to sonify the chart
 H.getOptions().exporting.buttons.contextButton.menuItems.push({

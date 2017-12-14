@@ -12,13 +12,50 @@ Highcharts.chart('columnChart', {
         type: 'column'
     },
     series: [{
-        data: [29.9, 71.5, 106.4, 129.2, 144.0, 176.0, 135.6, 148.5, 216.4, 194.1, 95.6, 54.4]
+        sonification: {
+            mode: 'musical'
+        },
+        data: [
+            {
+                x: 0,
+                y: 29.9,
+                sonification: {
+                    startTime: 0,
+                    pan: -1
+                }
+            }, {
+                x: 1,
+                y: 71,
+                sonification: {
+                    startTime: 1,
+                    pan: 1
+                }
+            }, {
+                x: 2,
+                y: 106.4,
+                sonification: {
+                    startTime: 2,
+                    volume: 0.5,
+                    duration: 2
+                }
+            }, {
+                x: 7,
+                y: 129.2,
+                sonification: {
+                    startTime: 7,
+                    frequency: 100
+                }
+            }, {
+                x: 10,
+                y: 144.0,
+                sonification: {
+                    startTime: 10,
+                    duration: 5
+                }
+            }
+        ]
     }, {
         data: [129.9, 171.5, 206.4, 429.2, 244.0, 376.0, 635.6, 248.5, 216.4, 294.1, 195.6, 54.4]
-    }, {
-        data: [9.9, 71.5, 6.4, 29.2, 44.0, 76.0, 35.6, 48.5, 16.4, 94.1, 5.6, 4.4]
-    }, {
-        data: [229.9, 271.5, 206.4, 229.2, 244.0, 276.0, 235.6, 248.5, 216.4, 294.1, 295.6, 254.4]
     }]
 });
 
