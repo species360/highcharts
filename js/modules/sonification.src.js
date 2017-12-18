@@ -38,6 +38,10 @@ H.Point.prototype.highlight = function () {
 
 
 H.Series.prototype.sonify = function (callback) {
+	if (this.isSonifying) {
+		return;
+	}
+
 	var gainNode = H.audio.createGain(),
 		panNode = H.audio.createStereoPanner(),
 		oscillator = H.audio.createOscillator(),
