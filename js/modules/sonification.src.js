@@ -155,11 +155,13 @@ H.Series.prototype.sonify = function (callback) {
 					(-1 * options.stereoRange + panStep * i)
 			);
 
-			series.sonifyTimeouts.push(setTimeout((function (point) {
-				return function () {
-					point.highlight();
-				};
-			}(point)), (startTime - H.audio.currentTime) * 1000));
+			if (options.showCursor) {
+				series.sonifyTimeouts.push(setTimeout((function (point) {
+					return function () {
+						point.highlight();
+					};
+				}(point)), (startTime - H.audio.currentTime) * 1000));
+			}
 		}
 	}
 
@@ -233,7 +235,8 @@ H.setOptions({
 		smooth: false, // Glide to next note frequency
 		stereo: true, // Note: Panning might not be accessible to mono users
 		stereoRange: 0.8, // Factor to apply to stereo range
-		volume: 0.9 // Factor
+		volume: 0.9, // Factor
+		showCursor: true // Highlight points as we go
 	}
 });
 /*
