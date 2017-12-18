@@ -163,14 +163,17 @@ H.Series.prototype.sonify = function (callback) {
 		}
 	}
 
-	// Stop oscillator
+	// Set oscillator stop time
 	oscillator.stop((endTime || startTime) + 1);
 
+	// Destroy when oscillator stops
 	oscillator.onended = function () {
 		delete series.oscillator;
 		delete series.sonifyTimeouts;
-		series.isSonifying = false;
-		callback.call(series);
+		delete series.isSonifying;
+		if (callback) {
+			callback.call(series);
+		}
 	};
 };
 
