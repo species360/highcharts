@@ -17,6 +17,7 @@ import '../parts/Tooltip.js';
 var merge = H.merge;
 
 H.audio = new (H.win.AudioContext || H.win.webkitAudioContext)();
+H.supportsSonification = !!(H.audio && H.audio.createStereoPanner);
 
 // Highlight a point (show tooltip and display hover state). Returns the 
 // highlighted point.
@@ -43,7 +44,11 @@ H.Series.prototype.sonify = function (callback) {
 		this.options.sonification
 	);
 
-	if (this.isSonifying || options.enabled === false) {
+	if (
+		this.isSonifying ||
+		options.enabled === false ||
+		!H.supportsSonification
+	) {
 		return;
 	}
 
