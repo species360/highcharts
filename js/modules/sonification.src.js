@@ -17,7 +17,9 @@ import '../parts/Tooltip.js';
 var merge = H.merge;
 
 H.audio = new (H.win.AudioContext || H.win.webkitAudioContext)();
-H.supportsSonification = !!(H.audio && H.audio.createStereoPanner);
+H.supportsSonification = !!(
+	H.audio && H.audio.createOscillator && H.audio.createGain
+);
 
 // Highlight a point (show tooltip and display hover state). Returns the 
 // highlighted point.
@@ -37,7 +39,7 @@ H.Point.prototype.highlight = function () {
 	return this;
 };
 
-
+// Sonify a series
 H.Series.prototype.sonify = function (callback) {
 	var options = merge(
 		this.chart.options.sonification,
@@ -53,7 +55,8 @@ H.Series.prototype.sonify = function (callback) {
 	}
 
 	var gainNode = H.audio.createGain(),
-		panNode = H.audio.createStereoPanner(),
+		// We fall back to mono if panning is not supported (Safari)
+		panNode = H.audio.createStereoPanner && H.audio.createStereoPanner(),
 		oscillator = H.audio.createOscillator(),
 		series = this,
 		numPoints = series.points.length,
@@ -95,7 +98,7 @@ H.Series.prototype.sonify = function (callback) {
 				gainNode.gain.setTargetAtTime(0, end,
 					(end - start) * options.endRampTime);
 			}
-			if (options.stereo) {
+			if (options.stereo && panNode) {
 				panNode.pan.setValueAtTime(pan, start);
 			}
 		};
@@ -111,13 +114,17 @@ H.Series.prototype.sonify = function (callback) {
 	}
 
 	// Init audio nodes
-	panNode.pan.value = -1;
 	gainNode.gain.value = options.volume;
 	oscillator.type = options.waveType;
 	oscillator.frequency.value = 0;
 	oscillator.connect(gainNode);
-	gainNode.connect(panNode);
-	panNode.connect(H.audio.destination);
+	if (panNode) {
+		panNode.pan.value = -1;
+		gainNode.connect(panNode);
+		panNode.connect(H.audio.destination);
+	} else {
+		gainNode.connect(H.audio.destination);
+	}
 
 	// Play
 	oscillator.start(H.audio.currentTime);
