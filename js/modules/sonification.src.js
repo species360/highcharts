@@ -38,7 +38,12 @@ H.Point.prototype.highlight = function () {
 
 
 H.Series.prototype.sonify = function (callback) {
-	if (this.isSonifying) {
+	var options = merge(
+		this.chart.options.sonification,
+		this.options.sonification
+	);
+
+	if (this.isSonifying || options.enabled === false) {
 		return;
 	}
 
@@ -46,10 +51,6 @@ H.Series.prototype.sonify = function (callback) {
 		panNode = H.audio.createStereoPanner(),
 		oscillator = H.audio.createOscillator(),
 		series = this,
-		options = merge(
-			this.chart.options.sonification,
-			this.options.sonification
-		),
 		numPoints = series.points.length,
 		valueToFreq = function (val) {
 			var valMin = series.yAxis && series.yAxis.dataMin || series.dataMin,
@@ -205,19 +206,25 @@ H.Chart.prototype.sonify = function () {
 				delete series.sonifyTimeouts;
 			}
 		});
-	} else if (this.series[0]) {
-		this.series[0].sonify(function sonifyNext() {
-			var newSeries = this.chart.series[this.index + 1];
-			if (newSeries && !this.chart.isCancellingSonify) {
-				setTimeout(function () {
-					newSeries.sonify(sonifyNext);
-				}, H.pick(
-					newSeries.options.sonification &&
-					newSeries.options.sonification.seriesDelay,
-					options.seriesDelay
-				));
-			}
-		});
+	} else if (this.series.length) {
+		if (options.polyphonic) {
+			H.each(this.series, function (series) {
+				series.sonify();
+			});
+		} else {
+			this.series[0].sonify(function sonifyNext() {
+				var newSeries = this.chart.series[this.index + 1];
+				if (newSeries && !this.chart.isCancellingSonify) {
+					setTimeout(function () {
+						newSeries.sonify(sonifyNext);
+					}, H.pick(
+						newSeries.options.sonification &&
+						newSeries.options.sonification.seriesDelay,
+						options.seriesDelay
+					));
+				}
+			});
+		}
 	}
 };
 
@@ -233,6 +240,7 @@ H.setOptions({
 		startRampTime: false, // Volume ramp for each note (factor of duration)
 		endRampTime: false, // Keep going indefinitely
 		waveType: 'sine',
+		polyphonic: false, // Play all series simultaneously
 		// mode: 'musical' to make point playtime correspond to x val, or use
 		// point.sonification.duration and .startTime
 		mode: 'normal',

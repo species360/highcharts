@@ -59,6 +59,7 @@ var chart = Highcharts.chart('highcharts-container', {
         maxDuration: 1000000,
         minPointDuration: 40,
         mode: 'musical',
+        polyphonic: true,
         waveType: 'sine',
         maxPointDuration: 200,
         startRampTime: 0.01,
@@ -165,8 +166,6 @@ var chart = Highcharts.chart('highcharts-container', {
         useHTML: true,
         backgroundColor: 'rgba(0,0,0,0)',
         pointFormatter: function () {
-            //tooltip.style.left = this.plotX + 'px';
-            //tooltip.style.top = this.plotY + 'px';
             if (this.series.index === 2) {
                 snowman.style.transform =
                   'rotate(' + Math.cos(this.x * 0.3) * 30 + 'deg)';
@@ -193,28 +192,21 @@ var chart = Highcharts.chart('highcharts-container', {
 });
 
 function togglePlay() {
-    document.getElementById('click-to-start').style.display = 'none';
-
-    setTimeout(function () {
+    if (chart.series[1].isSonifying) {
+        clearTimeout(chart.clickToPlayTimeout);
         document.getElementById('click-to-start').style.display = '';
-    }, 39000);
-
-    Highcharts.charts.forEach(function (chart) {
-        chart.series.forEach(function (series, i) {
-            if (i) {
-                series.sonify();
-            }
-        });
-    });
+    } else {
+        document.getElementById('click-to-start').style.display = 'none';
+        chart.clickToPlayTimeout = setTimeout(function () {
+            document.getElementById('click-to-start').style.display = '';
+        }, 39000);
+    }
+    chart.sonify();
 }
 
 document.getElementById(
     'click-to-start'
 ).onclick = snowman.onclick = togglePlay;
-
-//setTimeout(function() {
-
-//}, 1000);
 
 setInterval(function () {
     if (chart.series[0].points) {
