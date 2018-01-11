@@ -28,6 +28,7 @@ var snowman = document.getElementById('snowman'),
 var chart = Highcharts.chart('highcharts-container', {
     colors: colors,
     chart: {
+        alignTicks: false,
         spacingRight: 110,
         spacingTop: 30,
         type: 'line',
@@ -50,7 +51,7 @@ var chart = Highcharts.chart('highcharts-container', {
         }
     },
     subtitle: {
-        text: '...from your friends in Highcharts',
+        text: '...from your friends at Highcharts',
         style: {
             fontFamily: 'verdana, sans-serif',
             fontSize: '18px',
@@ -93,7 +94,8 @@ var chart = Highcharts.chart('highcharts-container', {
             maxSize: 50,
             color: 'rgba(255, 255, 255, 1)',
             xAxis: 1,
-            yAxis: 1
+            yAxis: 1,
+            enableMouseTracking: false
         },
         {
             sonification: {
@@ -151,7 +153,7 @@ var chart = Highcharts.chart('highcharts-container', {
                 }
             },
             labels: {
-                format: '{value}hz',
+                format: '{value} Hz',
                 style: {
                     color: '#afafaf'
                 }
@@ -214,6 +216,7 @@ if (Highcharts.supportsSonification) {
 }
 
 setInterval(function () {
+    // Let it snow
     if (chart.series[0].points) {
         chart.series[0].points.forEach(function (point) {
             if (!point) {

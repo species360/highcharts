@@ -15,7 +15,6 @@ var addEvent = H.addEvent,
 	arrayMax = H.arrayMax,
 	arrayMin = H.arrayMin,
 	correctFloat = H.correctFloat,
-	Date = H.Date,
 	defaultOptions = H.defaultOptions,
 	defaultPlotOptions = H.defaultPlotOptions,
 	defined = H.defined,
@@ -279,6 +278,7 @@ H.Series = H.seriesType('line', null, { // base series options
 	 * between the two points on either side of the null.
 	 * 
 	 * @type {Boolean}
+	 * @default  false
 	 * @sample {highcharts} highcharts/plotoptions/series-connectnulls-false/
 	 *         False by default
 	 * @sample {highcharts} highcharts/plotoptions/series-connectnulls-true/
@@ -540,6 +540,9 @@ H.Series = H.seriesType('line', null, { // base series options
 	 * 
 	 * It can be also be combined with `pointIntervalUnit` to draw irregular
 	 * time intervals.
+	 *
+	 * Please note that this options applies to the _series data_, not the
+	 * interval of the axis ticks, which is independent.
 	 * 
 	 * @type {Number}
 	 * @sample {highcharts} highcharts/plotoptions/series-pointstart-datetime/
@@ -558,6 +561,9 @@ H.Series = H.seriesType('line', null, { // base series options
 	 * but `pointIntervalUnit` also takes the DST crossover into consideration
 	 * when dealing with local time. Combine this option with `pointInterval`
 	 * to draw weeks, quarters, 6 months, 10 years etc.
+	 *
+	 * Please note that this options applies to the _series data_, not the
+	 * interval of the axis ticks, which is independent.
 	 * 
 	 * @validvalue [null, "day", "month", "year"]
 	 * @type {String}
@@ -749,7 +755,10 @@ H.Series = H.seriesType('line', null, { // base series options
 	 */
 	
 	/**
-	 * The type of series, for example `line` or `column`.
+	 * The type of series, for example `line` or `column`. By default, the
+	 * series type is inherited from [chart.type](#chart.type), so unless the
+	 * chart is a combination of series types, there is no need to set it on the
+	 * series level.
 	 * 
 	 * @validvalue [null, "line", "spline", "column", "area", "areaspline",
 	 *       "pie", "arearange", "areasplinerange", "boxplot", "bubble",
@@ -2492,7 +2501,8 @@ H.Series = H.seriesType('line', null, { // base series options
 			date,
 			pointInterval,
 			pointIntervalUnit = options.pointIntervalUnit,
-			dstCrossover = 0;
+			dstCrossover = 0,
+			time = this.chart.time;
 
 		xIncrement = pick(xIncrement, options.pointStart, 0);
 
@@ -2504,24 +2514,27 @@ H.Series = H.seriesType('line', null, { // base series options
 
 		// Added code for pointInterval strings
 		if (pointIntervalUnit) {
-			date = new Date(xIncrement);
+			date = new time.Date(xIncrement);
 
 			if (pointIntervalUnit === 'day') {
-				date = +date[Date.hcSetDate](
-					date[Date.hcGetDate]() + pointInterval
+				date = +date[time.setDate](
+					date[time.getDate]() + pointInterval
 				);
 			} else if (pointIntervalUnit === 'month') {
-				date = +date[Date.hcSetMonth](
-					date[Date.hcGetMonth]() + pointInterval
+				date = +date[time.setMonth](
+					date[time.getMonth]() + pointInterval
 				);
 			} else if (pointIntervalUnit === 'year') {
-				date = +date[Date.hcSetFullYear](
-					date[Date.hcGetFullYear]() + pointInterval
+				date = +date[time.setFullYear](
+					date[time.getFullYear]() + pointInterval
 				);
 			}
 
-			if (Date.hcHasTimeZone) {
-				dstCrossover = H.getTZOffset(date) - H.getTZOffset(xIncrement);
+			if (time.variableTimezone) {
+				dstCrossover = (
+					time.getTimezoneOffset(date) -
+					time.getTimezoneOffset(xIncrement)
+				);
 			}
 			pointInterval = date - xIncrement + dstCrossover;
 
@@ -3158,12 +3171,14 @@ H.Series = H.seriesType('line', null, { // base series options
 		}
 
 		/**
-		 * Read only. An array containing those values converted to points, but
-		 * in case the series data length exceeds the `cropThreshold`, or if the
-		 * data is grouped, `series.data` doesn't contain all the points. It
-		 * only contains the points that have been created on demand. To
-		 * modify the data, use {@link Highcharts.Series#setData} or {@link
-		 * Highcharts.Point#update}.
+		 * Read only. An array containing those values converted to points.
+		 * In case the series data length exceeds the `cropThreshold`, or if the
+		 * data is grouped, `series.data` doesn't contain all the points. Also,
+		 * in case a series is hidden, the `data` array may be empty. To access 
+		 * raw values, `series.options.data` will always be up to date.
+		 * `Series.data` only contains the points that have been created on
+		 * demand. To modify the data, use {@link Highcharts.Series#setData} or
+		 * {@link Highcharts.Point#update}.
 		 *
 		 * @name data
 		 * @memberOf Highcharts.Series
@@ -3285,6 +3300,15 @@ H.Series = H.seriesType('line', null, { // base series options
 			stackIndicator,
 			closestPointRangePx = Number.MAX_VALUE;
 
+		/*
+		 * Plotted coordinates need to be within a limited range. Drawing too
+		 * far outside the viewport causes various rendering issues (#3201,
+		 * #3923, #7555).
+		 */
+		function limitedRange(val) {
+			return Math.min(Math.max(-1e5, val), 1e5);
+		}
+
 		// Point placement is relative to each series pointRange (#5889)
 		if (pointPlacement === 'between') {
 			pointPlacement = 0.5;
@@ -3313,7 +3337,7 @@ H.Series = H.seriesType('line', null, { // base series options
 
 			// Get the plotX translation
 			point.plotX = plotX = correctFloat( // #5236
-				Math.min(Math.max(-1e5, xAxis.translate(
+				limitedRange(xAxis.translate( // #3923
 					xValue,
 					0,
 					0,
@@ -3321,7 +3345,7 @@ H.Series = H.seriesType('line', null, { // base series options
 					1,
 					pointPlacement,
 					this.type === 'flags'
-				)), 1e5) // #3923
+				)) // #3923
 			);
 
 			// Calculate the bottom y value for stacked series
@@ -3368,7 +3392,7 @@ H.Series = H.seriesType('line', null, { // base series options
 
 			// Set translated yBottom or remove it
 			point.yBottom = defined(yBottom) ?
-				yAxis.translate(yBottom, 0, 1, 0, 1) :
+				limitedRange(yAxis.translate(yBottom, 0, 1, 0, 1)) :
 				null;
 
 			// general hook, used for Highstock compare mode
@@ -3379,10 +3403,7 @@ H.Series = H.seriesType('line', null, { // base series options
 			// Set the the plotY value, reset it for redraws
 			point.plotY = plotY =
 				(typeof yValue === 'number' && yValue !== Infinity) ?
-					Math.min(Math.max(
-						-1e5,
-						yAxis.translate(yValue, 0, 1, 0, 1)), 1e5
-					) : // #3201
+					limitedRange(yAxis.translate(yValue, 0, 1, 0, 1)) : // #3201
 					undefined;
 
 			point.isInside =
@@ -3633,7 +3654,6 @@ H.Series = H.seriesType('line', null, { // base series options
 
 					// Shortcuts
 					symbol = pick(pointMarkerOptions.symbol, series.symbol);
-					point.hasImage = symbol.indexOf('url') === 0;
 
 					markerAttribs = series.markerAttribs(
 						point,
@@ -3708,6 +3728,7 @@ H.Series = H.seriesType('line', null, { // base series options
 		var seriesMarkerOptions = this.options.marker,
 			seriesStateOptions,
 			pointMarkerOptions = point.marker || {},
+			symbol = pointMarkerOptions.symbol || seriesMarkerOptions.symbol,
 			pointStateOptions,
 			radius = pick(
 				pointMarkerOptions.radius,
@@ -3727,6 +3748,8 @@ H.Series = H.seriesType('line', null, { // base series options
 				radius + (seriesStateOptions && seriesStateOptions.radiusPlus || 0)
 			);
 		}
+
+		point.hasImage = symbol && symbol.indexOf('url') === 0;
 
 		if (point.hasImage) {
 			radius = 0; // and subsequently width and height is not set
@@ -4720,9 +4743,11 @@ H.Series = H.seriesType('line', null, { // base series options
  */
 
 /**
- * Styled mode only. A specific color index to use for the point, so its
- * graphic representations are given the class name
- * `highcharts-color-{n}`.
+ * A specific color index to use for the point, so its graphic representations
+ * are given the class name `highcharts-color-{n}`. In styled mode this will
+ * change the color of the graphic. In non-styled mode, the color by is set by
+ * the `fill` attribute, so the change in class name won't have a visual effect
+ * by default.
  * 
  * @type {Number}
  * @since 5.0.0

@@ -1021,7 +1021,8 @@ Annotation.prototype = {
 	redrawItem: function (item) {
 		var points = this.linkPoints(item),
 			itemOptions = item.options,
-			text;
+			text,
+			time = this.chart.time;
 
 		if (!points.length) {
 			this.destroyItem(item);
@@ -1035,7 +1036,7 @@ Annotation.prototype = {
 				text = itemOptions.format || itemOptions.text;
 				item.attr({
 					text: text ?
-						format(text, points[0].getLabelConfig()) :
+						format(text, points[0].getLabelConfig(), time) :
 						itemOptions.formatter.call(points[0])
 				});
 			}
@@ -1325,7 +1326,10 @@ Annotation.prototype = {
 			itemPosRelativeX,
 			itemPosRelativeY,
 
-			showItem = point.series.visible && point.isInside !== false;
+			showItem =
+				point.series.visible &&
+				point.isInside !== false &&
+				(point.mock || point.graphic);
 
 		if (showItem) {
 

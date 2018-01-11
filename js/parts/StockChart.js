@@ -193,7 +193,11 @@ H.StockChart = H.stockChart = function (a, b, c) {
 			 * @default {highstock} false
 			 * @apioption yAxis.showLastLabel
 			 */
-			showLastLabel: false,
+			showLastLabel: !!(
+				// #6104, show last label by default for category axes
+				yAxisOptions.categories ||
+				yAxisOptions.type === 'category'
+			),
 
 			title: {
 				text: null
@@ -464,7 +468,11 @@ wrap(Axis.prototype, 'drawCrosshair', function (proceed, e, point) {
 	proceed.call(this, e, point);
 
 	// Check if the label has to be drawn
-	if (!defined(this.crosshair.label) || !this.crosshair.label.enabled || !this.cross) {
+	if (
+		!defined(this.crosshair.label) ||
+		!this.crosshair.label.enabled ||
+		!this.cross
+	) {
 		return;
 	}
 
@@ -498,7 +506,12 @@ wrap(Axis.prototype, 'drawCrosshair', function (proceed, e, point) {
 
 	// If the label does not exist yet, create it.
 	if (!crossLabel) {
-		crossLabel = this.crossLabel = chart.renderer.label(null, null, null, options.shape || 'callout')
+		crossLabel = this.crossLabel = chart.renderer.label(
+				null,
+				null,
+				null,
+				options.shape || 'callout'
+			)
 			.addClass('highcharts-crosshair-label' +
 				(this.series[0] && ' highcharts-color-' + this.series[0].colorIndex))
 			.attr({
@@ -514,7 +527,8 @@ wrap(Axis.prototype, 'drawCrosshair', function (proceed, e, point) {
 		crossLabel
 			.attr({
 				fill: options.backgroundColor ||
-					(this.series[0] && this.series[0].color) || '${palette.neutralColor60}',
+					(this.series[0] && this.series[0].color) ||
+					'${palette.neutralColor60}',
 				stroke: options.borderColor || '',
 				'stroke-width': options.borderWidth || 0
 			})
@@ -543,12 +557,18 @@ wrap(Axis.prototype, 'drawCrosshair', function (proceed, e, point) {
 	}
 
 	// Show the label
-	value = snap ? point[this.isXAxis ? 'x' : 'y'] : this.toValue(horiz ? e.chartX : e.chartY);
+	value = snap ?
+		point[this.isXAxis ? 'x' : 'y'] :
+		this.toValue(horiz ? e.chartX : e.chartY);
+
 	crossLabel.attr({
-		text: formatOption ? format(formatOption, { value: value }) : options.formatter.call(this, value),
+		text: formatOption ?
+			format(formatOption, { value: value }, chart.time) :
+			options.formatter.call(this, value),
 		x: posx,
 		y: posy,
-		visibility: 'visible'
+		// Crosshair should be rendered within Axis range (#7219)
+		visibility: value < this.min || value > this.max ? 'hidden' : 'visible'
 	});
 
 	crossBox = crossLabel.getBBox();
