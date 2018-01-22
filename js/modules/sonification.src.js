@@ -14,17 +14,18 @@ import '../parts/Series.js';
 import '../parts/Point.js';
 import '../parts/Tooltip.js';
 
-var merge = H.merge;
+var merge = H.merge,
+	doc = H.win.document;
 
 H.audio = new (H.win.AudioContext || H.win.webkitAudioContext)();
 H.supportsSonification = !!(
 	H.audio && H.audio.createOscillator && H.audio.createGain
 );
 
-// Highlight a point (show tooltip and display hover state). Returns the 
+// Highlight a point (show tooltip and display hover state). Returns the
 // highlighted point.
 // Stolen from Accessibility module
-H.Point.prototype.highlight = function () {
+H.Point.prototype.highlight = H.Point.prototype.highlight || function () {
 	var chart = this.series.chart;
 	if (!this.isNull) {
 		this.onMouseOver(); // Show the hover marker and tooltip
@@ -34,10 +35,52 @@ H.Point.prototype.highlight = function () {
 		}
 		// Don't call blur on the element, as it messes up the chart div's focus
 	}
-
 	chart.highlightedPoint = this;
 	return this;
 };
+
+
+// Add the sonification status live area when a chart is created
+H.Chart.prototype.callbacks.push(function (chart) {
+	if (chart.screenReaderRegion) {
+		chart.sonificationStatus = doc.createElement('p');
+		chart.sonificationStatus.setAttribute(
+			'class', 'highcharts-sonification-status'
+		);
+		chart.sonificationStatus.setAttribute('aria-live', 'assertive');
+		chart.screenReaderRegion.appendChild(chart.sonificationStatus);
+	}
+});
+
+
+// Set the current playing status of the sonification
+H.Chart.prototype.setSonificationStatus = function (statusMsg) {
+	if (this.sonificationStatus) {
+		this.sonificationStatus.innerHTML = statusMsg;
+	}
+};
+
+
+// Hide this series from screen readers
+H.Series.prototype.hideFromScreenReaders = function () {
+	var firstPointEl = (
+			this.points &&
+			this.points.length &&
+			this.points[0].graphic &&
+			this.points[0].graphic.element
+		),
+		seriesEl = (
+			firstPointEl &&
+			firstPointEl.parentNode || this.graph &&
+			this.graph.element || this.group &&
+			this.group.element
+		);
+	this.pointParentElement = seriesEl;
+	if (seriesEl) {
+		seriesEl.setAttribute('aria-hidden', 'true');
+	}
+};
+
 
 // Sonify a series
 H.Series.prototype.sonify = function (callback) {
@@ -105,6 +148,7 @@ H.Series.prototype.sonify = function (callback) {
 
 	series.isSonifying = true;
 	series.oscillator = oscillator;
+	series.chart.setSonificationStatus('Playing ' + series.name);
 
 	// Skip over points if we have too many
 	// We might want to use data grouping here
@@ -125,6 +169,9 @@ H.Series.prototype.sonify = function (callback) {
 	} else {
 		gainNode.connect(H.audio.destination);
 	}
+
+	// Remove from screen reader
+	series.hideFromScreenReaders();
 
 	// Play
 	oscillator.start(H.audio.currentTime);
@@ -173,6 +220,7 @@ H.Series.prototype.sonify = function (callback) {
 			);
 
 			if (options.showCursor) {
+				// Highlight this point at the time of sonifying
 				series.sonifyTimeouts.push(setTimeout((function (point) {
 					return function () {
 						point.highlight();
@@ -186,11 +234,16 @@ H.Series.prototype.sonify = function (callback) {
 	oscillator.stop((endTime || startTime) + 1);
 
 	// Destroy when oscillator stops
-	oscillator.onended = function () {
+	oscillator.onended = function (e, enableCallback) {
 		delete series.oscillator;
 		delete series.sonifyTimeouts;
 		delete series.isSonifying;
-		if (callback) {
+		series.chart.setSonificationStatus('');
+		// Make visible to screen readers again
+		series.pointParentElement.removeAttribute('aria-hidden');
+		delete series.pointParentElement;
+		// Do the callback if provided
+		if (callback && enableCallback !== false) {
 			callback.call(series);
 		}
 	};
@@ -204,12 +257,14 @@ H.Chart.prototype.sonify = function () {
 		}, false);
 
 	if (chartIsSonifying) {
+		// Stop sonifying
 		H.each(this.series, function (series) {
 			if (series.oscillator) {
-				series.oscillator.onended = function () {};
+				var oldOnEnd = series.oscillator.onended;
+				series.oscillator.onended = function () {
+					oldOnEnd.call(this, null, false);
+				};
 				series.oscillator.stop();
-				delete series.oscillator;
-				series.isSonifying = false;
 			}
 			if (series.sonifyTimeouts) {
 				H.each(series.sonifyTimeouts, function (timeoutId) {
@@ -219,6 +274,8 @@ H.Chart.prototype.sonify = function () {
 			}
 		});
 	} else if (this.series.length) {
+		// Start sonifying
+		this.setSonificationStatus(''); // Init the status live region
 		if (options.polyphonic) {
 			H.each(this.series, function (series) {
 				series.sonify();
@@ -243,7 +300,7 @@ H.Chart.prototype.sonify = function () {
 // Default sonification options, also available per series
 H.setOptions({
 	sonification: {
-		seriesDelay: 800, // Delay between series in ms
+		seriesDelay: 1500, // Delay between series in ms
 		maxDuration: 5000, // In ms
 		minPointDuration: 30, // In ms
 		maxPointDuration: 300, // In ms
@@ -259,7 +316,7 @@ H.setOptions({
 		smooth: false, // Glide to next note frequency
 		stereo: true, // Note: Panning might not be accessible to mono users
 		stereoRange: 0.8, // Factor to apply to stereo range
-		volume: 0.9, // Factor
+		volume: 0.8, // Factor
 		showCursor: true // Highlight points as we go
 	}
 });
