@@ -25,6 +25,10 @@ var merge = H.merge,
 seriesType('mappoint', 'scatter', {
 
 	dataLabels: {
+		/**
+		 * @default {point.name}
+		 * @apioption plotOptions.mappoint.dataLabels.format
+		 */
 		enabled: true,
 		formatter: function () { // #2945
 			return this.point.name;
@@ -35,10 +39,6 @@ seriesType('mappoint', 'scatter', {
 		style: {
 			color: '${palette.neutralColor100}'
 		}
-		/**
-		 * @default {point.name}
-		 * @apioption plotOptions.mappoint.dataLabels.format
-		 */
 	}
 
 // Prototype members
@@ -49,7 +49,12 @@ seriesType('mappoint', 'scatter', {
 // Point class
 }, {
 	applyOptions: function (options, x) {
-		var mergedOptions = options.lat !== undefined && options.lon !== undefined ? merge(options, this.series.chart.fromLatLonToPoint(options)) : options;
+		var mergedOptions = (
+			options.lat !== undefined &&
+			options.lon !== undefined ?
+				merge(options, this.series.chart.fromLatLonToPoint(options)) :
+				options
+		);
 		return Point.prototype.applyOptions.call(this, mergedOptions, x);
 	}
 });

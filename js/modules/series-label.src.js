@@ -24,7 +24,7 @@ import '../parts/Chart.js';
 import '../parts/Series.js';
 
 var labelDistance = 3,
-	wrap = H.wrap,
+	addEvent = H.addEvent,
 	each = H.each,
 	extend = H.extend,
 	isNumber = H.isNumber,
@@ -493,9 +493,9 @@ Series.prototype.checkClearPoint = function (x, y, bBox, checkDistance) {
 };
 
 /**
- * The main initiator method that runs on chart level after initiation and redraw. It runs in 
- * a timeout to prevent locking, and loops over all series, taking all series and labels into
- * account when placing the labels.
+ * The main initiator method that runs on chart level after initiation and
+ * redraw. It runs in  a timeout to prevent locking, and loops over all series,
+ * taking all series and labels into account when placing the labels.
  */
 Chart.prototype.drawSeriesLabels = function () {
 	
@@ -660,8 +660,16 @@ Chart.prototype.drawSeriesLabels = function () {
 
 			// Brute force, try all positions on the chart in a 16x16 grid
 			if (!results.length && !onArea) {
-				for (x = paneLeft + paneWidth - bBox.width; x >= paneLeft; x -= 16) {
-					for (y = paneTop; y < paneTop + paneHeight - bBox.height; y += 16) {
+				for (
+					x = paneLeft + paneWidth - bBox.width;
+					x >= paneLeft;
+					x -= 16
+				) {
+					for (
+						y = paneTop;
+						y < paneTop + paneHeight - bBox.height;
+						y += 16
+					) {
 						clearPoint = series.checkClearPoint(x, y, bBox, true);
 						if (clearPoint) {
 							results.push(clearPoint);
@@ -746,7 +754,7 @@ Chart.prototype.drawSeriesLabels = function () {
 /**
  * Prepare drawing series labels
  */
-function drawLabels(proceed) {
+function drawLabels() {
 
 	var chart = this,
 		delay = Math.max(
@@ -755,12 +763,10 @@ function drawLabels(proceed) {
 		),
 		initial = !chart.hasRendered;
 
-	proceed.apply(chart, [].slice.call(arguments, 1));
-
 	chart.labelSeries = [];
 	chart.labelSeriesMaxSum = 0;
 
-	clearTimeout(chart.seriesLabelTimer);
+	H.clearTimeout(chart.seriesLabelTimer);
 
 	// Which series should have labels
 	each(chart.series, function (series) {
@@ -809,9 +815,10 @@ function drawLabels(proceed) {
 	});
 
 	chart.seriesLabelTimer = H.syncTimeout(function () {
-		chart.drawSeriesLabels();
+		if (chart.series && chart.labelSeries) { // #7931, chart destroyed
+			chart.drawSeriesLabels();
+		}
 	}, chart.renderer.forExport ? 0 : delay);
 
 }
-wrap(Chart.prototype, 'render', drawLabels);
-wrap(Chart.prototype, 'redraw', drawLabels);
+addEvent(Chart, 'render', drawLabels);

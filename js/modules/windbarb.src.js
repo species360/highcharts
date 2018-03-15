@@ -54,7 +54,7 @@ seriesType('windbarb', 'column', {
 		 * names can be internationalized by modifying
 		 * `Highcharts.seriesTypes.windbarb.prototype.beaufortNames`.
 		 */
-		pointFormat: '<b>{series.name}</b>: {point.value} ({point.beaufort})<br/>'
+		pointFormat: '<span style="color:{point.color}">\u25CF</span> {series.name}: <b>{point.value}</b> ({point.beaufort})<br/>'
 	},
 	/**
 	 * Pixel length of the stems.
@@ -101,6 +101,7 @@ seriesType('windbarb', 'column', {
 	markerAttribs: function () {
 		return undefined;
 	},
+	getPlotBox: onSeriesMixin.getPlotBox,
 	/**
 	 * Create a single wind arrow. It is later rotated around the zero
 	 * centerpoint.
@@ -336,11 +337,16 @@ seriesType('windbarb', 'column', {
  * 
  * @type {Array<Object|Array|Number>}
  * @extends series.line.data
- * @sample {highcharts} highcharts/chart/reflow-true/ Numerical values
- * @sample {highcharts} highcharts/series/data-array-of-arrays/ Arrays of numeric x and y
- * @sample {highcharts} highcharts/series/data-array-of-arrays-datetime/ Arrays of datetime x and y
- * @sample {highcharts} highcharts/series/data-array-of-name-value/ Arrays of point.name and y
- * @sample {highcharts} highcharts/series/data-array-of-objects/ Config objects
+ * @sample {highcharts} highcharts/chart/reflow-true/
+ *         Numerical values
+ * @sample {highcharts} highcharts/series/data-array-of-arrays/
+ *         Arrays of numeric x and y
+ * @sample {highcharts} highcharts/series/data-array-of-arrays-datetime/
+ *         Arrays of datetime x and y
+ * @sample {highcharts} highcharts/series/data-array-of-name-value/
+ *         Arrays of point.name and y
+ * @sample {highcharts} highcharts/series/data-array-of-objects/
+ *         Config objects    
  * @product highcharts highstock
  * @apioption series.windbarb.data
  */

@@ -142,7 +142,7 @@ QUnit.test('BBox for mulitiple lines', function (assert) {
     );
 });
 
-QUnit.test('HTML entities', function (assert) {
+QUnit.test('HTML', function (assert) {
     var ren = new Highcharts.SVGRenderer(
         document.getElementById('container'),
         500,
@@ -162,6 +162,20 @@ QUnit.test('HTML entities', function (assert) {
         text.element.textContent,
         'a < b and c > d',
         'Tags don\'t start with spaces (#7126)'
+    );
+
+    var html = ren.text('useHTML', 100, 100, true).add();
+    assert.close(
+        html.element.offsetLeft,
+        100,
+        1,
+        'Left offset should reflect initial position'
+    );
+    assert.close(
+        html.element.offsetHeight + html.element.offsetTop,
+        100,
+        10,
+        'Top offset should reflect initial position'
     );
 });
 
@@ -189,4 +203,40 @@ QUnit.test('Dir rtl (#3482)', function (assert) {
     );
 
     document.getElementById('container').removeAttribute('dir');
+});
+
+QUnit.test('Attributes', function (assert) {
+    var ren = new Highcharts.Renderer(
+        document.getElementById('container'),
+        600,
+        400
+    );
+
+    var text = ren
+        .text(
+            'The quick brown fox jumps <span class="red">over</span> the lazy dog',
+            20,
+            20
+        )
+        .add();
+
+    assert.strictEqual(
+        text.element.childNodes[1].getAttribute('class'),
+        'red',
+        'Double quotes, red span should be picked up'
+    );
+
+    text = ren
+        .text(
+            "The quick brown fox jumps <span class='red'>over</span> the lazy dog",
+            20,
+            20
+        )
+        .add();
+
+    assert.strictEqual(
+        text.element.childNodes[1].getAttribute('class'),
+        'red',
+        'Single quotes, red span should be picked up'
+    );
 });

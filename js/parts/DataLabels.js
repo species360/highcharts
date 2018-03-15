@@ -22,7 +22,7 @@ var addEvent = H.addEvent,
 	seriesTypes = H.seriesTypes,
 	stableSort = H.stableSort;
 
-/* eslint max-len: ["warn", 80, 4] */
+    
 /**
  * General distribution algorithm for distributing labels of differing size
  * along a confined length in two dimensions. The algorithm takes an array of
@@ -349,6 +349,8 @@ Series.prototype.drawDataLabels = function () {
 			}
 		});
 	}
+
+	H.fireEvent(this, 'afterDrawDataLabels');
 };
 
 /**
@@ -447,7 +449,8 @@ Series.prototype.alignDataLabel = function (
 				alignAttr.x -= bBox.width;
 				alignAttr.y -= negRotation ? 0 : bBox.height;
 			}
-			
+			dataLabel.placed = true;
+			dataLabel.alignAttr = alignAttr;
 
 		} else {
 			dataLabel.align(options, null, alignTo);
@@ -763,7 +766,10 @@ if (seriesTypes.pie) {
 
 					sideOverflow = null;
 					// Overflow left
-					if (x - dataLabelWidth < connectorPadding) {
+					if (
+						x - dataLabelWidth < connectorPadding &&
+						i === 1 // left half
+					) {
 						sideOverflow = Math.round(
 							dataLabelWidth - x + connectorPadding
 						);
@@ -771,8 +777,8 @@ if (seriesTypes.pie) {
 
 					// Overflow right
 					} else if (
-						x + dataLabelWidth >
-						plotWidth - connectorPadding
+						x + dataLabelWidth > plotWidth - connectorPadding &&
+						i === 0 // right half
 					) {
 						sideOverflow = Math.round(
 							x + dataLabelWidth - plotWidth + connectorPadding
@@ -902,9 +908,13 @@ if (seriesTypes.pie) {
 					if (dataLabel.sideOverflow) {
 						dataLabel._attr.width =
 							dataLabel.getBBox().width - dataLabel.sideOverflow;
+						
 						dataLabel.css({
 							width: dataLabel._attr.width + 'px',
-							textOverflow: 'ellipsis'
+							textOverflow: (
+								this.options.dataLabels.style.textOverflow ||
+								'ellipsis'
+							)
 						});
 						dataLabel.shortened = true;
 					}
