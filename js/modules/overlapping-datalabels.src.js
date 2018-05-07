@@ -15,7 +15,9 @@ var Chart = H.Chart,
     each = H.each,
     objectEach = H.objectEach,
     pick = H.pick,
-    addEvent = H.addEvent;
+    addEvent = H.addEvent,
+    isArray = H.isArray,
+    reduce = H.reduce;
 
 // Collect potensial overlapping data labels. Stack labels probably don't need
 // to be considered because they are usually accompanied by data labels that lie
@@ -43,11 +45,16 @@ addEvent(Chart, 'render', function collectAndHide() {
 
     each(this.series || [], function (series) {
         var dlOptions = series.options.dataLabels,
+            enabled = isArray(dlOptions) ?
+                reduce(dlOptions, function (acc, cur) {
+                    return acc || cur;
+                }, false) :
+                dlOptions.enabled,
             // Range series have two collections
             collections = series.dataLabelCollections || ['dataLabels'];
 
         if (
-            (dlOptions.enabled || series._hasPointLabels) &&
+            (enabled || series._hasPointLabels) &&
             !dlOptions.allowOverlap &&
             series.visible
         ) { // #3866
@@ -56,6 +63,7 @@ addEvent(Chart, 'render', function collectAndHide() {
                     if (point.dataLabels) {
                         each(point.dataLabels, function (label) {
                             label.labelrank = pick(
+                                label.labelrank,
                                 point.labelrank,
                                 point.shapeArgs && point.shapeArgs.height
                             ); // #4118

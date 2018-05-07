@@ -444,6 +444,9 @@ Series.prototype.drawDataLabels = function () {
                         dataLabel.add(dataLabelsGroup);
                     }
 
+                    // Store labelrank if defined
+                    dataLabel.labelrank = labelOptions.labelrank;
+
                     // Now the data label is created and placed at 0,0, so we
                     // need to align it
                     series.alignDataLabel(
