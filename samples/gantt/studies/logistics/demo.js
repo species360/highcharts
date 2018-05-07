@@ -101,6 +101,7 @@ var getPointsFromTrip = function (trip, groups, vessel, y) {
                 end: end,
                 color: group.color,
                 vessel: vessel.name,
+                trip: trip.name,
                 y: y,
                 type: key,
                 startPort: startPort,
@@ -168,12 +169,30 @@ var rightLabelFormat = function () {
     }
 };
 
+var onSeriesClick = function (event) {
+    var el = document.getElementById('tooltip-info'),
+        point = event.point,
+        vessel = information.vessels.find(function (vessel) {
+            return vessel.name === point.vessel;
+        }),
+        trip = vessel.trips.find(function (trip) {
+            return trip.name === point.trip;
+        });
+    el.innerHTML = [
+        '<p>Vessel: ' + vessel.name + '</p>',
+        'Start: ' + Highcharts.dateFormat(trip.start)
+    ].join('');
+};
+
 var xAxisMin = today - (10 * days),
     xAxisMax = xAxisMin + 90 * days;
 
 Highcharts.ganttChart('container', {
     plotOptions: {
         series: {
+            events: {
+                click: onSeriesClick
+            },
             borderRadius: 0,
             borderWidth: 0,
             pointPadding: 0,
@@ -234,6 +253,7 @@ Highcharts.ganttChart('container', {
     yAxis: [{
         type: 'grid',
         maxPadding: 0,
+        staticScale: 100,
         labels: {
             useHTML: true
         },
