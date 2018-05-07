@@ -23,18 +23,30 @@ var information = {
         utilized: 95,
         idle: 10,
         trips: [{
+            name: 'Contract 1',
+            startPort: 'USGLS',
+            midPort: 'BEZEE',
+            endPort: 'USCP6',
             start: today + days,
             loading: 1 * days + 2 * hours + 45 * minutes,
             ladenVoyage: 21 * days,
             unloading: 1 * days + 5 * hours,
             ballastVoyage: 14 * days
         }, {
+            name: 'Contract 2',
+            startPort: 'USGLS',
+            midPort: 'BEZEE',
+            endPort: 'USCP6',
             start: today + 50 * days,
             loading: 2 * days,
             ladenVoyage: 10 * days,
             unloading: 1 * days,
             ballastVoyage: 5 * days
         }, {
+            name: 'Contract 5',
+            startPort: 'USGLS',
+            midPort: 'BEZEE',
+            endPort: 'USCP6',
             start: today + 75 * days,
             loading: 1 * days + 2 * hours + 45 * minutes,
             ladenVoyage: 21 * days,
@@ -46,12 +58,20 @@ var information = {
         utilized: 75,
         idle: 23,
         trips: [{
+            name: 'Contract 3',
+            startPort: 'USGLS',
+            midPort: 'BEZEE',
+            endPort: 'USCP6',
             start: today - 5 * days,
             loading: 1 * days + 2 * hours + 45 * minutes,
             ladenVoyage: 21 * days,
             unloading: 1 * days + 5 * hours,
             ballastVoyage: 14 * days
         }, {
+            name: 'Contract 4',
+            startPort: 'USGLS',
+            midPort: 'BEZEE',
+            endPort: 'USCP6',
             start: today + 45 * days,
             loading: 2 * days,
             ladenVoyage: 10 * days,
@@ -68,12 +88,24 @@ var getPointsFromTrip = function (trip, groups, vessel, y) {
         var group = groups[key],
             duration = trip[key],
             end = start + duration,
+            startPort = key === 'ladenVoyage' ?
+                trip.startPort : (
+                    key === 'ballastVoyage' ? trip.midPort : null
+                ),
+            endPort = key === 'ladenVoyage' ?
+                trip.midPort : (
+                    key === 'ballastVoyage' ? trip.endPort : null
+                ),
             point = {
                 start: start,
                 end: end,
                 color: group.color,
                 vessel: vessel.name,
-                y: y
+                y: y,
+                type: key,
+                startPort: startPort,
+                endPort: endPort,
+                name: trip.name
             };
         // Update start for the next iteration
         start = end;
@@ -118,6 +150,24 @@ var getCategoriesFromInformation = function (information) {
     });
 };
 
+var leftLabelFormat = function () {
+    if (this.point.type === 'ladenVoyage' || this.point.type === 'ballastVoyage') {
+        return this.point.startPort;
+    }
+};
+
+var centerLabelFormat = function () {
+    if (this.point.type === 'ladenVoyage') {
+        return ' ' + this.point.name + ' ';
+    }
+};
+
+var rightLabelFormat = function () {
+    if (this.point.type === 'ladenVoyage' || this.point.type === 'ballastVoyage') {
+        return this.point.endPort;
+    }
+};
+
 var xAxisMin = today - (10 * days),
     xAxisMax = xAxisMin + 90 * days;
 
@@ -126,7 +176,34 @@ Highcharts.ganttChart('container', {
         series: {
             borderRadius: 0,
             borderWidth: 0,
-            pointPadding: 0
+            pointPadding: 0,
+            dataLabels: [{
+                enabled: true,
+                labelrank: 1,
+                formatter: leftLabelFormat,
+                align: 'left',
+                style: {
+                    fontSize: '8px'
+                }
+            }, {
+                enabled: true,
+                labelrank: 2,
+                formatter: centerLabelFormat,
+                align: 'center',
+                borderWidth: 1,
+                padding: 3,
+                style: {
+                    fontSize: '10px'
+                }
+            }, {
+                enabled: true,
+                labelrank: 1,
+                formatter: rightLabelFormat,
+                align: 'right',
+                style: {
+                    fontSize: '8px'
+                }
+            }]
         }
     },
     legend: {
