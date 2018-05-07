@@ -553,6 +553,10 @@ const createProductJS = () => {
     "date": "${date}",
     "nr": "${version}"
     },
+    "Highcharts Gantt": {
+        "date": "${date}",
+        "nr": "${version}"
+    },
     "Highstock": {
         "date": "${date}",
         "nr": "${version}"

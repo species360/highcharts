@@ -2049,6 +2049,7 @@ H.extend(Axis.prototype, /** @lends Highcharts.Axis.prototype */{
      * @private
      */
     setOptions: function (userOptions) {
+        H.datePropsToTimestamps(userOptions);
         this.options = merge(
             this.defaultOptions,
             this.coll === 'yAxis' && this.defaultYAxisOptions,
@@ -4274,7 +4275,8 @@ H.extend(Axis.prototype, /** @lends Highcharts.Axis.prototype */{
     },
 
     /**
-     * Render the tick labels to a preliminary position to get their sizes.
+    /**
+     * Render the tick labels to a preliminary position to get their sizes
      *
      * @private
      */
@@ -4618,7 +4620,9 @@ H.extend(Axis.prototype, /** @lends Highcharts.Axis.prototype */{
 
             // render new ticks in old position
             if (slideInTicks && ticks[pos].isNew) {
-                ticks[pos].render(i, true, 0.1);
+                // Start with negative opacity so that it is visible from
+                // halfway into the animation
+                ticks[pos].render(i, true, -1);
             }
 
             ticks[pos].render(i);
