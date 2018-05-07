@@ -116,7 +116,7 @@ var getPointsFromTrip = function (trip, groups, vessel, y) {
     }, []);
 };
 
-var convertInformationToSeries = function (info) {
+var getSeriesFromInformation = function (info) {
     var events = info.events,
         vessels = info.vessels;
     return vessels.reduce(function (series, vessel, i) {
@@ -216,7 +216,7 @@ Highcharts.ganttChart('container', {
     scrollbar: {
         enabled: true
     },
-    series: convertInformationToSeries(information),
+    series: getSeriesFromInformation(information),
     tooltip: {
         enabled: false
     },
