@@ -81,6 +81,163 @@ var information = {
     }]
 };
 
+// --- Drag/drop functionality ----
+
+Highcharts.Chart.prototype.callbacks.push(function (chart) {
+    var addEvent = Highcharts.addEvent,
+        container = chart.container;
+
+    function mouseDown() {
+        var guideWidth,
+            guideX = Infinity,
+            bBox;
+
+        if (chart.hoverPoint) {
+            // Store point to move
+            chart.dragPoint = chart.hoverPoint;
+
+            // Draw guide box
+            bBox = chart.dragPoint.graphic.getBBox();
+            guideWidth = chart.dragPoint.series.points.reduce(
+                function (acc, cur) {
+                    var bb;
+                    if (cur.trip === chart.dragPoint.trip) {
+                        bb = cur.graphic.getBBox();
+                        guideX = Math.min(guideX, bb.x);
+                        acc += bb.width;
+                    }
+                    return acc;
+                }, 0
+            );
+            chart.dragGuideBox = chart.renderer.rect(
+                chart.plotLeft + guideX,
+                chart.plotTop + bBox.y,
+                guideWidth,
+                bBox.height
+            ).attr({
+                'stroke-width': 1,
+                'stroke-dasharray': '5, 5',
+                stroke: '#888',
+                fill: 'rgba(0, 0, 0, 0.1)',
+                zIndex: 900
+            }).add();
+        }
+    }
+
+    function mouseMove(e) {
+        var dragPoint = chart.dragPoint,
+            deltaX,
+            deltaY;
+        if (dragPoint) {
+            // No tooltip while dragging
+            e.preventDefault();
+
+            // Update new positions
+            dragPoint.dragPageX = dragPoint.dragPageX || e.pageX;
+            dragPoint.dragPageY = dragPoint.dragPageY || e.pageY;
+            deltaX = e.pageX - dragPoint.dragPageX;
+            deltaY = e.pageY - dragPoint.dragPageY;
+            dragPoint.newX = Math.round(dragPoint.series.xAxis.toValue(
+                dragPoint.plotX + deltaX, true
+            ));
+            dragPoint.newY = Math.round(dragPoint.series.yAxis.toValue(
+                dragPoint.plotY + deltaY, true
+            ));
+
+            // Move guide box
+            chart.dragGuideBox.translate(deltaX, deltaY);
+        }
+    }
+
+    function drop() {
+        var newSeries,
+            newPoints,
+            deltaX,
+            dragPoint = chart.dragPoint,
+            reset = function () {
+                // Remove guide box
+                if (chart.dragGuideBox) {
+                    chart.dragGuideBox.destroy();
+                    delete chart.dragGuideBox;
+                }
+                // Remove stored dragging references on point in case we update
+                // instead of replacing.
+                if (dragPoint) {
+                    delete dragPoint.dragPageX;
+                    delete dragPoint.dragPageY;
+                    delete dragPoint.newX;
+                    delete dragPoint.newY;
+                }
+                // Remove chart reference to current dragging point
+                delete chart.dragPoint;
+            };
+
+        if (
+            dragPoint && dragPoint.newX !== undefined &&
+            dragPoint.newY !== undefined
+        ) {
+            // Find series the points should belong to.
+            // Series have y value as ID, making it easy to map between them.
+            newSeries = chart.get(dragPoint.newY);
+            if (!newSeries) {
+                reset();
+                return;
+            }
+
+            // Define the new points
+            deltaX = dragPoint.newX - dragPoint.start;
+            newPoints = dragPoint.series.points.reduce(function (acc, cur) {
+                var point;
+                // Only add points from the same series with the same trip name
+                if (cur.trip === dragPoint.trip) {
+                    point = {
+                        start: cur.start + deltaX,
+                        end: cur.end + deltaX,
+                        y: dragPoint.newY,
+                        oldPoint: cur
+                    };
+                    // Copy over data from old point
+                    [
+                        'color', 'vessel', 'trip', 'type', 'startPort',
+                        'endPort', 'name'
+                    ].forEach(function (prop) {
+                        point[prop] = cur[prop];
+                    });
+                    acc.push(point);
+                }
+                return acc;
+            }, []);
+
+            // Update the point
+            if (newSeries !== dragPoint.series) {
+                newPoints.forEach(function (newPoint) {
+                    newPoint.oldPoint.remove(false);
+                    delete newPoint.oldPoint;
+                    newSeries.addPoint(newPoint);
+                });
+            } else {
+                // Use point.update if series is the same
+                newPoints.forEach(function (newPoint) {
+                    var old = newPoint.oldPoint;
+                    delete newPoint.oldPoint;
+                    old.update(newPoint);
+                });
+            }
+        }
+
+        // Always reset on mouseup
+        reset();
+    }
+
+    // Add events
+    addEvent(container, 'mousedown', mouseDown);
+    addEvent(container, 'mousemove', mouseMove);
+    addEvent(document, 'mouseup', drop);
+    addEvent(container, 'mouseleave', drop);
+});
+
+// ---- end drag/drop ----
+
 var getPointsFromTrip = function (trip, groups, vessel, y) {
     var start = trip.start,
         events = Object.keys(groups);
@@ -130,7 +287,8 @@ var getSeriesFromInformation = function (info) {
 
         series.push({
             name: vessel.name,
-            data: data
+            data: data,
+            id: i
         });
         return series;
     }, []);
@@ -193,6 +351,7 @@ Highcharts.ganttChart('container', {
             events: {
                 click: onSeriesClick
             },
+            cursor: 'pointer',
             borderRadius: 0,
             borderWidth: 0,
             pointPadding: 0,

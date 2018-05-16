@@ -354,6 +354,7 @@ Highcharts.Point.prototype = {
                 each(point.dataLabels, function (label) {
                     label.destroy();
                 });
+                delete point.dataLabel; // Remove now-dead reference
             }
             point.destroyElements();
         }
