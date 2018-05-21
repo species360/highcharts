@@ -80,6 +80,68 @@ var information = {
         }]
     }]
 };
+var find = Highcharts.find,
+    dragGuideBox = {
+        default: {
+            'stroke-width': 1,
+            'stroke-dasharray': '5, 5',
+            stroke: '#888',
+            fill: 'rgba(0, 0, 0, 0.1)',
+            zIndex: 900
+        },
+        error: {
+            fill: 'rgba(255, 0, 0, 0.2)'
+        }
+    };
+
+/**
+ * NB! Copied from modules/wordcloud.src.js
+ * isRectanglesIntersecting - Detects if there is a collision between two
+ *     rectangles.
+ *
+ * @param  {object} r1 First rectangle.
+ * @param  {object} r2 Second rectangle.
+ * @return {boolean} Returns true if the rectangles overlap.
+ */
+var isRectanglesIntersecting = function isRectanglesIntersecting(r1, r2) {
+    return !(
+        r2.left > r1.right ||
+        r2.right < r1.left ||
+        r2.top > r1.bottom ||
+        r2.bottom < r1.top
+    );
+};
+
+/**
+ * Collision detection.
+ * @param {Object} point The positions of the new point.
+ * @param {Object} chart The chart if there is a collision.
+ * @returns {Boolean} Returns true if the point is colliding.
+ */
+var isColliding = function (point, chart) {
+    var r1 = {
+            left: point.start,
+            right: point.end,
+            top: point.y,
+            bottom: point.y
+        },
+        // Only check for collision with points lying on the same series as the
+        // new point.
+        series = find(chart.series, function (series) {
+            return series.index === point.y;
+        }),
+        data = series && series.data || [];
+    return !!find(data, function (p) {
+        var r2 = {
+            left: p.start,
+            right: p.end,
+            top: p.y,
+            bottom: p.y
+        };
+
+        return p.trip === point.trip ? false : isRectanglesIntersecting(r1, r2);
+    });
+};
 
 // --- Drag/drop functionality ----
 
@@ -90,11 +152,17 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
     function mouseDown() {
         var guideWidth,
             guideX = Infinity,
+            group = {
+                start: Number.MAX_SAFE_INTEGER,
+                end: Number.MIN_SAFE_INTEGER,
+                y: 0
+            },
             bBox;
 
         if (chart.hoverPoint) {
             // Store point to move
             chart.dragPoint = chart.hoverPoint;
+            group.y = chart.dragPoint.y;
 
             // Draw guide box
             bBox = chart.dragPoint.graphic.getBBox();
@@ -105,30 +173,36 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                         bb = cur.graphic.getBBox();
                         guideX = Math.min(guideX, bb.x);
                         acc += bb.width;
+                        // Collect start and end of group.
+                        group.start = Math.min(cur.start, group.start);
+                        group.end = Math.max(cur.end, group.end);
                     }
                     return acc;
                 }, 0
             );
+            chart.dragPoint.group = group;
+
             chart.dragGuideBox = chart.renderer.rect(
                 chart.plotLeft + guideX,
                 chart.plotTop + bBox.y,
                 guideWidth,
                 bBox.height
-            ).attr({
-                'stroke-width': 1,
-                'stroke-dasharray': '5, 5',
-                stroke: '#888',
-                fill: 'rgba(0, 0, 0, 0.1)',
-                zIndex: 900
-            }).add();
+            ).attr(dragGuideBox.default).add();
         }
     }
 
     function mouseMove(e) {
         var dragPoint = chart.dragPoint,
+            group = dragPoint && dragPoint.group,
+            xAxis,
+            yAxis,
+            xDelta,
+            isDragPointColliding,
             deltaX,
             deltaY;
         if (dragPoint) {
+            xAxis = dragPoint.series.xAxis;
+            yAxis = dragPoint.series.yAxis;
             // No tooltip while dragging
             e.preventDefault();
 
@@ -137,15 +211,31 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
             dragPoint.dragPageY = dragPoint.dragPageY || e.pageY;
             deltaX = e.pageX - dragPoint.dragPageX;
             deltaY = e.pageY - dragPoint.dragPageY;
-            dragPoint.newX = Math.round(dragPoint.series.xAxis.toValue(
+            dragPoint.newX = Math.round(xAxis.toValue(
                 dragPoint.plotX + deltaX, true
             ));
-            dragPoint.newY = Math.round(dragPoint.series.yAxis.toValue(
+            dragPoint.newY = Math.round(yAxis.toValue(
                 dragPoint.plotY + deltaY, true
             ));
+            xDelta = dragPoint.newX - dragPoint.start;
+
+            // Check if the new position of the dragged point is colliding.
+            dragPoint.isColliding =
+            isDragPointColliding = isColliding({
+                start: group.start + xDelta,
+                end: group.end + xDelta,
+                y: dragPoint.newY,
+                trip: dragPoint.trip
+            }, chart);
 
             // Move guide box
-            chart.dragGuideBox.translate(deltaX, deltaY);
+            chart.dragGuideBox
+                .translate(deltaX, deltaY)
+                .attr(
+                    isDragPointColliding ?
+                    dragGuideBox.error :
+                    dragGuideBox.default
+                );
         }
     }
 
@@ -173,8 +263,10 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
             };
 
         if (
-            dragPoint && dragPoint.newX !== undefined &&
-            dragPoint.newY !== undefined
+            dragPoint &&
+            dragPoint.newX !== undefined &&
+            dragPoint.newY !== undefined &&
+            !dragPoint.isColliding
         ) {
             // Find series the points should belong to.
             // Series have y value as ID, making it easy to map between them.
