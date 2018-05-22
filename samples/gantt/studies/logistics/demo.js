@@ -66,7 +66,8 @@ var information = {
             loading: 1 * days + 2 * hours + 45 * minutes,
             ladenVoyage: 21 * days,
             unloading: 1 * days + 5 * hours,
-            ballastVoyage: 14 * days
+            ballastVoyage: 14 * days,
+            earliestPossibleReturn: 30 * days
         }, {
             name: 'Contract 4',
             startPort: 'USGLS',
@@ -141,6 +142,80 @@ var isColliding = function (point, chart) {
 
         return p.trip === point.trip ? false : isRectanglesIntersecting(r1, r2);
     });
+};
+
+var drawIndicator = function (indicator, params) {
+    var metrics = params.metrics,
+        plotX = params.xAxis.translate(indicator.x, 0, 0, 0, 1),
+        plotY = params.yAxis.translate(indicator.y, 0, 1, 0, 1),
+        x1 = plotX,
+        x2 = plotX,
+        y1 = plotY - metrics.width / 2,
+        y2 = plotY + metrics.width / 2,
+        graphic = indicator.graphic,
+        lineWidth = 1,
+        animate = {},
+        attr = {
+            stroke: '#ff0000',
+            'stroke-width': lineWidth,
+            dashstyle: 'dash'
+        },
+        path = params.renderer.crispLine(['M', x1, y1, 'L', x2, y2], lineWidth);
+
+    // Create the graphic if new, or update the already existing graphic.
+    if (!graphic) {
+        indicator.graphic = graphic = params.renderer.path(path)
+            .add(params.group);
+    } else {
+        animate.d = path;
+    }
+    graphic.attr(attr).animate(animate, undefined, undefined, true);
+
+    return indicator;
+};
+
+var drawSeriesIndicators = function (series) {
+    var options = series && series.options,
+        indicators = series.indicators || options && options.indicators || [],
+        fn = function (indicator) {
+            return drawIndicator(indicator, {
+                group: series.group,
+                metrics: series.columnMetrics,
+                xAxis: series.xAxis,
+                yAxis: series.yAxis,
+                renderer: series.chart.renderer
+            });
+        };
+    series.indicators = Highcharts.map(indicators, fn);
+};
+
+var onDropUpdateIndicator = function (params) {
+    var newSeries = params.newSeries,
+        oldSeries = params.oldSeries,
+        trip = params.trip,
+        y = params.y,
+        deltaX = params.deltaX,
+        indicator,
+        indicatorIndex;
+
+    // Find the indicator belonging to the given group.
+    indicator = oldSeries.indicators.find(function (indicator, index) {
+        indicatorIndex = index;
+        return indicator.trip === trip;
+    });
+
+    if (indicator) {
+        indicator.x += deltaX;
+        indicator.y = y;
+        if (newSeries !== oldSeries) {
+            // Remove the indicator from the old series
+            oldSeries.indicators.splice(indicatorIndex, 1);
+            // Add the indicator to its new series
+            newSeries.indicators.push(indicator);
+            // Destroy the indicator graphic to avoid animation.
+            indicator.graphic = indicator.graphic.destroy();
+        }
+    }
 };
 
 // --- Drag/drop functionality ----
@@ -244,6 +319,9 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
             newPoints,
             deltaX,
             dragPoint = chart.dragPoint,
+            trip,
+            newY,
+            oldSeries,
             reset = function () {
                 // Remove guide box
                 if (chart.dragGuideBox) {
@@ -268,6 +346,11 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
             dragPoint.newY !== undefined &&
             !dragPoint.isColliding
         ) {
+            // Collect some values from dragPoint
+            oldSeries = dragPoint.series;
+            trip = dragPoint.trip;
+            newY = dragPoint.newY;
+
             // Find series the points should belong to.
             // Series have y value as ID, making it easy to map between them.
             newSeries = chart.get(dragPoint.newY);
@@ -278,10 +361,10 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
 
             // Define the new points
             deltaX = dragPoint.newX - dragPoint.start;
-            newPoints = dragPoint.series.points.reduce(function (acc, cur) {
+            newPoints = oldSeries.points.reduce(function (acc, cur) {
                 var point;
                 // Only add points from the same series with the same trip name
-                if (cur.trip === dragPoint.trip) {
+                if (cur.trip === trip) {
                     point = {
                         start: cur.start + deltaX,
                         end: cur.end + deltaX,
@@ -301,20 +384,33 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
             }, []);
 
             // Update the point
-            if (newSeries !== dragPoint.series) {
+            if (newSeries !== oldSeries) {
                 newPoints.forEach(function (newPoint) {
                     newPoint.oldPoint.remove(false);
                     delete newPoint.oldPoint;
-                    newSeries.addPoint(newPoint);
+                    newSeries.addPoint(newPoint, false);
                 });
             } else {
                 // Use point.update if series is the same
                 newPoints.forEach(function (newPoint) {
                     var old = newPoint.oldPoint;
                     delete newPoint.oldPoint;
-                    old.update(newPoint);
+                    old.update(newPoint, false);
                 });
             }
+
+            // Update the indicator for the group
+            onDropUpdateIndicator({
+                deltaX: deltaX,
+                newSeries: newSeries,
+                oldSeries: oldSeries,
+                trip: trip,
+                y: newY
+            });
+
+            // Call chart redraw to update the visual positions of the points
+            // and indicators
+            newSeries.chart.redraw();
         }
 
         // Always reset on mouseup
@@ -370,16 +466,28 @@ var getSeriesFromInformation = function (info) {
     var events = info.events,
         vessels = info.vessels;
     return vessels.reduce(function (series, vessel, i) {
-        var data = [];
-
-        vessel.trips.forEach(function (trip) {
+        var info = vessel.trips.reduce(function (result, trip) {
             var points = getPointsFromTrip(trip, events, vessel, i);
-            data = data.concat(points);
+
+            if (trip.earliestPossibleReturn) {
+                result.indicators.push({
+                    x: trip.start + trip.earliestPossibleReturn,
+                    y: i,
+                    trip: trip.name
+                });
+            }
+
+            result.data = result.data.concat(points);
+            return result;
+        }, {
+            data: [],
+            indicators: []
         });
 
         series.push({
             name: vessel.name,
-            data: data,
+            data: info.data,
+            indicators: info.indicators,
             id: i
         });
         return series;
@@ -434,6 +542,12 @@ var onSeriesClick = function (event) {
     ].join('');
 };
 
+var afterSeriesRender = function () {
+    var series = this;
+    // Draw Earliest Possible Return Indicators
+    drawSeriesIndicators(series);
+};
+
 var xAxisMin = today - (10 * days),
     xAxisMax = xAxisMin + 90 * days;
 
@@ -441,6 +555,7 @@ Highcharts.ganttChart('container', {
     plotOptions: {
         series: {
             events: {
+                afterRender: afterSeriesRender,
                 click: onSeriesClick
             },
             cursor: 'pointer',
