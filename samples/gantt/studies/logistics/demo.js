@@ -494,19 +494,23 @@ var getSeriesFromInformation = function (info) {
     }, []);
 };
 
-var getCategoriesFromInformation = function (information) {
-    var vessels = information.vessels;
-    return vessels.map(function (vessel) {
-        var idle = vessel.idle,
-            utilized = vessel.utilized,
-            className = utilized > 75 ? 'ok' : 'warn';
-        return [
-            '<span class="info-span ' + className + '">',
-            '    <span class="utilized">' + utilized + '%</span><br/>',
-            '    <span>t: ' + idle + ' days</span>',
-            '</span>'
-        ].join('\n');
-    });
+var getCategoryFromIdleTime = function (utilized, idle) {
+    var thresholds = {
+            25: 'bad',
+            50: 'ok',
+            75: 'good',
+            100: 'great'
+        },
+        threshold = find(Object.keys(thresholds), function (threshold) {
+            return utilized < +threshold;
+        }),
+        className = thresholds[threshold];
+    return [
+        '<span class="info-span ' + className + '">',
+        '    <span class="utilized">' + utilized + '%</span><br/>',
+        '    <span>t: ' + idle + ' days</span>',
+        '</span>'
+    ].join('\n');
 };
 
 var leftLabelFormat = function () {
@@ -525,6 +529,30 @@ var rightLabelFormat = function () {
     if (this.point.type === 'ladenVoyage' || this.point.type === 'ballastVoyage') {
         return this.point.endPort;
     }
+};
+
+var gridColumnFormatterSeriesName = function () {
+    var chart = this.chart,
+        series = chart.get(this.value);
+    return series.name;
+};
+
+var gridColumnFormatterSeriesIdle = function () {
+    var chart = this.chart,
+        series = chart.get(this.value),
+        points = series.points || [],
+        xAxis = series.xAxis,
+        min = xAxis.min,
+        max = xAxis.max,
+        used = points.reduce(function (accumulator, point) {
+            var start = Math.max(point.start, min),
+                end = Math.min(point.end, max),
+                time = (end > start) ? end - start : 0;
+            return accumulator + time;
+        }, 0),
+        percentage = Math.round((100 / (max - min)) * used),
+        idleDays = Math.round(((max - min) - used) / days);
+    return getCategoryFromIdleTime(percentage, idleDays);
 };
 
 var onSeriesClick = function (event) {
@@ -625,9 +653,13 @@ Highcharts.ganttChart('container', {
         },
         grid: {
             columns: [{
-                categories: ['Vessel 1', 'Vessel 2']
+                labels: {
+                    formatter: gridColumnFormatterSeriesName
+                }
             }, {
-                categories: getCategoriesFromInformation(information)
+                labels: {
+                    formatter: gridColumnFormatterSeriesIdle
+                }
             }]
         }
     }]

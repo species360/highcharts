@@ -658,7 +658,8 @@ wrap(Axis.prototype, 'init', function (proceed, chart, userOptions) {
                         chart: chart,
                         isFirst: isFirst,
                         isLast: isLast,
-                        value: value
+                        value: this.value,
+                        pointProperty: value
                     });
                 });
 
