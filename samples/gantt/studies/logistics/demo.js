@@ -390,6 +390,8 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                     delete newPoint.oldPoint;
                     newSeries.addPoint(newPoint, false);
                 });
+                // TODO series.addPoint is not adding point to series.points
+                newSeries.generatePoints();
             } else {
                 // Use point.update if series is the same
                 newPoints.forEach(function (newPoint) {
