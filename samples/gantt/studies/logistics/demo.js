@@ -218,6 +218,169 @@ var onDropUpdateIndicator = function (params) {
     }
 };
 
+// --- Task resize functionality ----
+
+var showResizeHandles = function () {
+    var renderer = this.series.chart.renderer,
+        point = this,
+        series = this.series,
+        xAxis = series.xAxis,
+        addEvent = Highcharts.addEvent,
+        handleAttrs = {
+            strokeWidth: 2,
+            fill: 'rgba(170, 170, 170, 0.6)'
+        },
+        handleCss = {
+            stroke: '#444',
+            cursor: 'ew-resize'
+        },
+        getHandlePath = function (left) {
+            var bBox = point.graphic.getBBox(),
+                edge = left ? bBox.x : bBox.x + bBox.width;
+            return [
+                // Top wick
+                'M', edge, bBox.y,
+                'L', edge, bBox.y + bBox.height / 3,
+                // Box
+                'L', edge + 2, bBox.y + bBox.height / 3,
+                'L', edge + 2, bBox.y + bBox.height / 3 * 2,
+                'L', edge - 2, bBox.y + bBox.height / 3 * 2,
+                'L', edge - 2, bBox.y + bBox.height / 3,
+                'L', edge, bBox.y + bBox.height / 3,
+                // Bottom wick
+                'M', edge, bBox.y + bBox.height / 3 * 2,
+                'L', edge, bBox.y + bBox.height,
+                // Grip lines
+                'M', edge - 1, bBox.y + bBox.height / 12 * 5,
+                'L', edge + 1, bBox.y + bBox.height / 12 * 5,
+                'M', edge - 1, bBox.y + bBox.height / 2,
+                'L', edge + 1, bBox.y + bBox.height / 2,
+                'M', edge - 1, bBox.y + bBox.height / 12 * 7,
+                'L', edge + 1, bBox.y + bBox.height / 12 * 7
+            ];
+        },
+        resizeCollides = function (point, newX) {
+            var points = point.series.points,
+                i = points.length,
+                within = function (p, x) {
+                    return x >= p.x - 1 && x <= p.x2 + 1;
+                };
+            while (i--) {
+                if (points[i] !== point && within(points[i], newX)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+    if (
+        !this.isDragResizing &&
+        !this.isAnimating &&
+        !this.overResizeHandle
+    ) {
+        this.isDragResizing = true;
+        if (!this.dragResizeHandles) {
+            // Create handles if they don't exist
+            this.dragResizeHandles = renderer.g().add(this.graphic.parentGroup);
+            this.rightResizeHandle = renderer.path(getHandlePath())
+                .attr(handleAttrs).css(handleCss).add(this.dragResizeHandles);
+            this.leftResizeHandle = renderer.path(getHandlePath(true))
+                .attr(handleAttrs).css(handleCss).add(this.dragResizeHandles);
+
+            // Add event handlers
+            [this.rightResizeHandle, this.leftResizeHandle].forEach(
+                function (handle, i) {
+                    addEvent(handle.element, 'mouseover', function () {
+                        point.overResizeHandle = true;
+                    });
+                    addEvent(handle.element, 'mouseout', function () {
+                        delete point.overResizeHandle;
+                    });
+                    addEvent(handle.element, 'mousedown', function (e) {
+                        var linkedPoint = series.points.find(function (p) {
+                            return i ?
+                                // Left handle - look for point with x2 === x
+                                p.x2 === point.x :
+                                // Right handle
+                                p.x === point.x2;
+                        });
+                        point.resizeStart = {
+                            pageX: e.pageX,
+                            plotX: Math.round(xAxis.toPixels(
+                                i ? point.x : point.x2,
+                                true
+                            )),
+                            handle: i ? 'left' : 'right',
+                            translateX: handle.attr('translateX'),
+                            linkedPoint: linkedPoint
+                        };
+                        e.preventDefault();
+                        e.stopPropagation();
+                    });
+                });
+            addEvent(series.chart.container, 'mousemove', function (e) {
+                var resizeData = point.resizeStart;
+                if (resizeData) {
+                    var newPoint = Highcharts.extend({}, point.options),
+                        newLinkedPoint,
+                        deltaX = e.pageX - resizeData.pageX,
+                        newX = Math.round(xAxis.toValue(
+                            resizeData.plotX + deltaX, true
+                        )),
+                        left = resizeData.handle === 'left',
+                        handle = point[
+                            left ? 'leftResizeHandle' : 'rightResizeHandle'
+                        ];
+
+                    if (resizeCollides(point, newX)) {
+                        delete point.resizeStart;
+                        return;
+                    }
+
+                    newPoint[left ? 'x' : 'x2'] =
+                        newPoint[left ? 'start' : 'end'] =
+                        newX;
+
+                    point.update(newPoint, true, false);
+
+                    if (resizeData.linkedPoint) {
+                        newLinkedPoint = Highcharts.extend(
+                            {}, resizeData.linkedPoint.options
+                        );
+                        newLinkedPoint[left ? 'x2' : 'x'] =
+                            newLinkedPoint[left ? 'end' : 'start'] =
+                            newX;
+                        resizeData.linkedPoint.update(
+                            newLinkedPoint, true, false
+                        );
+                    }
+
+                    handle.translate(resizeData.translateX + deltaX, 0);
+                }
+            });
+            addEvent(document, 'mouseup', function () {
+                delete point.resizeStart;
+            });
+        } else {
+            // Update handle location if already exists
+            this.rightResizeHandle.attr({
+                d: getHandlePath()
+            }).translate(0, 0);
+            this.leftResizeHandle.attr({
+                d: getHandlePath(true)
+            }).translate(0, 0);
+        }
+        this.dragResizeHandles.show();
+    }
+};
+
+var hideResizeHandles = function () {
+    if (this.dragResizeHandles) {
+        this.dragResizeHandles.hide();
+        delete this.isDragResizing;
+    }
+};
+
 // --- Drag/drop functionality ----
 
 Highcharts.Chart.prototype.callbacks.push(function (chart) {
@@ -369,7 +532,8 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                         start: cur.start + deltaX,
                         end: cur.end + deltaX,
                         y: dragPoint.newY,
-                        oldPoint: cur
+                        oldPoint: cur,
+                        hovering: cur === dragPoint
                     };
                     // Copy over data from old point
                     [
@@ -383,12 +547,21 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                 return acc;
             }, []);
 
+            // Hide resize lines if on
+            hideResizeHandles.call(chart.dragPoint);
+
             // Update the point
             if (newSeries !== oldSeries) {
                 newPoints.forEach(function (newPoint) {
                     newPoint.oldPoint.remove(false);
                     delete newPoint.oldPoint;
                     newSeries.addPoint(newPoint, false);
+                    if (newPoint.hovering) {
+                        showResizeHandles.call(newSeries.points[
+                            newSeries.points.length - 1
+                        ]);
+                        delete newPoint.hovering;
+                    }
                 });
                 // TODO series.addPoint is not adding point to series.points
                 newSeries.generatePoints();
@@ -397,8 +570,16 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                 newPoints.forEach(function (newPoint) {
                     var old = newPoint.oldPoint;
                     delete newPoint.oldPoint;
-                    old.update(newPoint, false);
+
+                    
+                    old.update(newPoint, false, false);
+                    // Keep track of whether or not we are animating the point,
+                    // so that we don't draw resize handles on a moving point.
+                    
+                    
                 });
+                // Show resize handles after animating all points                            
+                
             }
 
             // Update the indicator for the group
@@ -413,6 +594,9 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
             // Call chart redraw to update the visual positions of the points
             // and indicators
             newSeries.chart.redraw();
+            setTimeout(function () {
+            //    showResizeHandles.call(chart.hoverPoint);
+            }, 300);
         }
 
         // Always reset on mouseup
@@ -633,11 +817,18 @@ var xAxisMin = today - (10 * days),
 Highcharts.ganttChart('container', {
     plotOptions: {
         series: {
+            stickyTracking: true,
             events: {
                 afterRender: afterSeriesRender,
                 click: onSeriesClick
             },
-            cursor: 'pointer',
+            point: {
+                events: {
+                    mouseOver: showResizeHandles,
+                    mouseOut: hideResizeHandles
+                }
+            },
+            cursor: 'move',
             borderRadius: 0,
             borderWidth: 0,
             pointPadding: 0,
