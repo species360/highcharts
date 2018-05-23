@@ -555,6 +555,55 @@ var gridColumnFormatterSeriesIdle = function () {
     return getCategoryFromIdleTime(percentage, idleDays);
 };
 
+var tooltipFormatter = function () {
+    var point = this.point,
+        trip = point.trip,
+        series = point.series,
+        dateFormat = function (date) {
+            var format = '%e. %b';
+            return Highcharts.dateFormat(format, date);
+        },
+        pointFormat = {
+            'loading': function (point) {
+                return [
+                    '<b>Loading</b><br/>',
+                    'Start: ' + dateFormat(point.start) + '<br/>',
+                    'End: ' + dateFormat(point.end) + '<br/>'
+                ].join('');
+            },
+            'ladenVoyage': function (point) {
+                return [
+                    '<b>Laden Voyage</b><br/>',
+                    'Start: (' + point.startPort + ') ' + dateFormat(point.start) + '<br/>',
+                    'End: (' + point.endPort + ') ' + dateFormat(point.end) + '<br/>'
+                ].join('');
+            },
+            'unloading': function (point) {
+                return [
+                    '<b>Unloading</b><br/>',
+                    'Start: ' + dateFormat(point.start) + '<br/>',
+                    'End: ' + dateFormat(point.end) + '<br/>'
+                ].join('');
+            },
+            'ballastVoyage': function (point) {
+                var series = point.series,
+                    indicator = find(series.indicators, function (indicator) {
+                        return indicator.trip === point.trip;
+                    });
+                return [
+                    '<b>Ballast Voyage</b><br/>',
+                    'Start: (' + point.startPort + ') ' + dateFormat(point.start) + '<br/>',
+                    'End: (' + point.endPort + ') ' + dateFormat(point.end) + '<br/>',
+                    indicator ? 'EPR: ' + dateFormat(indicator.x) : ''
+                ].join('');
+            }
+        };
+    return [
+        '<b>' + trip + ' - ' + series.name + '</b><br/>',
+        pointFormat[point.type] ? pointFormat[point.type](point) : ''
+    ].join('');
+};
+
 var onSeriesClick = function (event) {
     var el = document.getElementById('tooltip-info'),
         point = event.point,
@@ -631,7 +680,7 @@ Highcharts.ganttChart('container', {
     },
     series: getSeriesFromInformation(information),
     tooltip: {
-        enabled: false
+        formatter: tooltipFormatter
     },
     xAxis: [{
         type: 'datetime',
