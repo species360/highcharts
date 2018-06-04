@@ -82,6 +82,7 @@ var information = {
     }]
 };
 var find = Highcharts.find,
+    isNumber = Highcharts.isNumber,
     dragGuideBox = {
         default: {
             'stroke-width': 1,
@@ -174,11 +175,49 @@ var drawIndicator = function (indicator, params) {
     return indicator;
 };
 
+var drawHeatIndicator = function (indicator, params) {
+    var metrics = params.metrics,
+        xAxis = params.xAxis,
+        start = isNumber(indicator.start) ? indicator.start : xAxis.max,
+        end = isNumber(indicator.end) ? indicator.end : xAxis.max,
+        x1 = xAxis.translate(start, 0, 0, 0, 1),
+        x2 = xAxis.translate(end, 0, 0, 0, 1),
+        plotY = params.yAxis.translate(indicator.y, 0, 1, 0, 1),
+        y1 = plotY,
+        y2 = plotY + metrics.width / 2,
+        graphic = indicator.graphic,
+        animate = {},
+        attr = {
+            fill: '#ff0000'
+        };
+
+    // Create the graphic if new, or update the already existing graphic.
+    if (!graphic) {
+        indicator.graphic = graphic = params.renderer
+            .rect(x1, y1, x2 - x1, y2 - y1)
+            .add(params.group);
+    } else {
+        animate.x = x1;
+        animate.y = y1;
+        animate.width = x2 - x1;
+        animate.height = y2 - y1;
+    }
+    graphic.attr(attr).animate(animate, undefined, undefined, true);
+
+    return indicator;
+
+};
+
 var drawSeriesIndicators = function (series) {
     var options = series && series.options,
         indicators = series.indicators || options && options.indicators || [],
+        mapOfDrawFunctions = {
+            heat: drawHeatIndicator,
+            line: drawIndicator
+        },
         fn = function (indicator) {
-            return drawIndicator(indicator, {
+            var draw = mapOfDrawFunctions[indicator.type];
+            return draw(indicator, {
                 group: series.group,
                 metrics: series.columnMetrics,
                 xAxis: series.xAxis,
@@ -571,15 +610,15 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                     var old = newPoint.oldPoint;
                     delete newPoint.oldPoint;
 
-                    
+
                     old.update(newPoint, false, false);
                     // Keep track of whether or not we are animating the point,
                     // so that we don't draw resize handles on a moving point.
-                    
-                    
+
+
                 });
-                // Show resize handles after animating all points                            
-                
+                // Show resize handles after animating all points
+
             }
 
             // Update the indicator for the group
@@ -612,40 +651,88 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
 
 // ---- end drag/drop ----
 
-var getPointsFromTrip = function (trip, groups, vessel, y) {
+var getPoint = function (params) {
+    var start = params.start,
+        style = params.style,
+        trip = params.trip,
+        type = params.type,
+        vessel = params.vessel,
+        duration = trip[type],
+        end = start + duration,
+        startPort = type === 'ladenVoyage' ?
+            trip.startPort : (
+                type === 'ballastVoyage' ? trip.midPort : null
+            ),
+        endPort = type === 'ladenVoyage' ?
+            trip.midPort : (
+                type === 'ballastVoyage' ? trip.endPort : null
+            );
+    return {
+        start: start,
+        end: end,
+        color: style.color,
+        vessel: vessel.name,
+        trip: trip.name,
+        y: params.y,
+        type: type,
+        startPort: startPort,
+        endPort: endPort,
+        name: trip.name
+    };
+};
+
+var getGroupFromTrip = function (trip, groups, vessel, y) {
     var start = trip.start,
         events = Object.keys(groups);
-    return events.reduce(function (points, key) {
-        var group = groups[key],
-            duration = trip[key],
-            end = start + duration,
-            startPort = key === 'ladenVoyage' ?
-                trip.startPort : (
-                    key === 'ballastVoyage' ? trip.midPort : null
-                ),
-            endPort = key === 'ladenVoyage' ?
-                trip.midPort : (
-                    key === 'ballastVoyage' ? trip.endPort : null
-                ),
-            point = {
-                start: start,
-                end: end,
-                color: group.color,
-                vessel: vessel.name,
-                trip: trip.name,
-                y: y,
-                type: key,
-                startPort: startPort,
-                endPort: endPort,
-                name: trip.name
-            };
+
+    return events.reduce(function (group, key) {
+        var point = getPoint({
+            start: group.end,
+            style: groups[key],
+            trip: trip,
+            type: key,
+            vessel: vessel,
+            y: y
+        });
+
         // Update start for the next iteration
-        start = end;
+        group.end = point.end;
 
         // Add the point
-        points.push(point);
-        return points;
-    }, []);
+        group.points.push(point);
+        return group;
+    }, {
+        end: start,
+        points: [],
+        start: start,
+        y: y
+    });
+};
+
+var getHeatIndicatorsFromGroups = function (groups) {
+    return groups
+        .slice()
+        .sort(function (a, b) {
+            return b.start - a.start;
+        }).reduce(function (obj, current) {
+            var prev = obj.previous;
+
+            obj.indicators.push({
+                type: 'heat',
+                start: current.end,
+                end: prev && prev.start,
+                y: current.y,
+                name: current.name
+            });
+
+            obj.previous = current;
+
+            return obj;
+        }, {
+            previous: undefined,
+            indicators: []
+        })
+        .indicators;
 };
 
 var getSeriesFromInformation = function (info) {
@@ -653,22 +740,29 @@ var getSeriesFromInformation = function (info) {
         vessels = info.vessels;
     return vessels.reduce(function (series, vessel, i) {
         var info = vessel.trips.reduce(function (result, trip) {
-            var points = getPointsFromTrip(trip, events, vessel, i);
+            var group = getGroupFromTrip(trip, events, vessel, i);
 
             if (trip.earliestPossibleReturn) {
                 result.indicators.push({
+                    type: 'line',
                     x: trip.start + trip.earliestPossibleReturn,
                     y: i,
                     trip: trip.name
                 });
             }
 
-            result.data = result.data.concat(points);
+            result.groups.push(group);
+            result.data = result.data.concat(group.points);
             return result;
         }, {
             data: [],
+            groups: [],
             indicators: []
         });
+
+        info.indicators = info.indicators.concat(
+            getHeatIndicatorsFromGroups(info.groups)
+        );
 
         series.push({
             name: vessel.name,
