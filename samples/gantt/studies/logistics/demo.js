@@ -83,6 +83,7 @@ var information = {
 };
 var find = Highcharts.find,
     isNumber = Highcharts.isNumber,
+    reduce = Highcharts.reduce,
     dragGuideBox = {
         default: {
             'stroke-width': 1,
@@ -592,7 +593,14 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
             // Update the point
             if (newSeries !== oldSeries) {
                 newPoints.forEach(function (newPoint) {
-                    newPoint.oldPoint.remove(false);
+                    var oldPoint = newPoint.oldPoint;
+
+                    if (oldPoint.heatIndicator.graphic) {
+                        oldPoint.heatIndicator.graphic =
+                            oldPoint.heatIndicator.graphic.destroy();
+                    }
+
+                    newPoint.oldPoint = oldPoint = oldPoint.remove(false);
                     delete newPoint.oldPoint;
                     newSeries.addPoint(newPoint, false);
                     if (newPoint.hovering) {
@@ -709,32 +717,6 @@ var getGroupFromTrip = function (trip, groups, vessel, y) {
     });
 };
 
-var getHeatIndicatorsFromGroups = function (groups) {
-    return groups
-        .slice()
-        .sort(function (a, b) {
-            return b.start - a.start;
-        }).reduce(function (obj, current) {
-            var prev = obj.previous;
-
-            obj.indicators.push({
-                type: 'heat',
-                start: current.end,
-                end: prev && prev.start,
-                y: current.y,
-                name: current.name
-            });
-
-            obj.previous = current;
-
-            return obj;
-        }, {
-            previous: undefined,
-            indicators: []
-        })
-        .indicators;
-};
-
 var getSeriesFromInformation = function (info) {
     var events = info.events,
         vessels = info.vessels;
@@ -759,10 +741,6 @@ var getSeriesFromInformation = function (info) {
             groups: [],
             indicators: []
         });
-
-        info.indicators = info.indicators.concat(
-            getHeatIndicatorsFromGroups(info.groups)
-        );
 
         series.push({
             name: vessel.name,
@@ -820,18 +798,12 @@ var gridColumnFormatterSeriesName = function () {
 var gridColumnFormatterSeriesIdle = function () {
     var chart = this.chart,
         series = chart.get(this.value),
-        points = series.points || [],
         xAxis = series.xAxis,
-        min = xAxis.min,
-        max = xAxis.max,
-        used = points.reduce(function (accumulator, point) {
-            var start = Math.max(point.start, min),
-                end = Math.min(point.end, max),
-                time = (end > start) ? end - start : 0;
-            return accumulator + time;
-        }, 0),
-        percentage = Math.round((100 / (max - min)) * used),
-        idleDays = Math.round(((max - min) - used) / days);
+        total = xAxis.max - xAxis.min,
+        idle = series.idle || 0,
+        used = total - idle,
+        percentage = Math.round((100 / total) * used),
+        idleDays = Math.round(idle / days);
     return getCategoryFromIdleTime(percentage, idleDays);
 };
 
@@ -899,8 +871,50 @@ var onSeriesClick = function (event) {
     ].join('');
 };
 
+var calculateSeriesIdleTime = function (series) {
+    var points = series.points
+        .slice() // Make a copy before sorting.
+        .sort(function (a, b) {
+            return b.start - a.start;
+        }),
+        xAxis = series.xAxis,
+        min = xAxis.min,
+        firstPoint = points[points.length - 1].start,
+        totalIdle = firstPoint > min ? firstPoint - min : 0,
+        max = xAxis.max;
+
+    reduce(points, function (next, current) {
+        var start = Math.max(current.end, min),
+            end = next ? Math.min(next.start, max) : max,
+            idle = (start < end) ? end - start : 0;
+        current.idle = idle;
+        totalIdle += idle;
+        return current;
+    }, undefined);
+    series.idle = totalIdle;
+};
+
 var afterSeriesRender = function () {
-    var series = this;
+    var series = this,
+        min = series.xAxis.min,
+        fn = function (indicator) {
+            return drawHeatIndicator(indicator, {
+                group: series.group,
+                metrics: series.columnMetrics,
+                xAxis: series.xAxis,
+                yAxis: series.yAxis,
+                renderer: series.chart.renderer
+            });
+        };
+    calculateSeriesIdleTime(series);
+    Highcharts.each(series.points, function (point) {
+        var heatIndicator = point.heatIndicator || {
+            y: point.y
+        };
+        heatIndicator.start = Math.max(point.end, min);
+        heatIndicator.end = heatIndicator.start + point.idle;
+        point.heatIndicator = fn(heatIndicator);
+    });
     // Draw Earliest Possible Return Indicators
     drawSeriesIndicators(series);
 };
