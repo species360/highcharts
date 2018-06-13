@@ -14,15 +14,15 @@ const {
     buildModules,
     buildDistFromModules,
     getFilesInFolder
-} = require('highcharts-assembler/src/build.js');
+} = require('../../highcharts-assembler/src/build.js');
 const {
     getOrderedDependencies,
     regexGetCapture
-} = require('highcharts-assembler/src/dependencies.js');
+} = require('../../highcharts-assembler/src/dependencies.js');
 const {
     checkDependency
   } = require('./filesystem.js');
-const build = require('highcharts-assembler');
+const build = require('../../highcharts-assembler');
 
 // TODO move to a utils file
 const replaceAll = (str, search, replace) => str.split(search).join(replace);
@@ -60,6 +60,7 @@ const getFileOptions = (files) => {
             if (
               file.indexOf('modules') > -1 ||
               file.indexOf('themes') > -1 ||
+              file.indexOf('gantt/') > -1 ||
               file.indexOf('indicators') > -1
             ) {
                 obj[file] = {

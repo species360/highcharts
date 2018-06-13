@@ -82,8 +82,6 @@ var information = {
     }]
 };
 var find = Highcharts.find,
-    isNumber = Highcharts.isNumber,
-    reduce = Highcharts.reduce,
     dragGuideBox = {
         default: {
             'stroke-width': 1,
@@ -176,44 +174,10 @@ var drawIndicator = function (indicator, params) {
     return indicator;
 };
 
-var drawHeatIndicator = function (indicator, params) {
-    var metrics = params.metrics,
-        xAxis = params.xAxis,
-        start = isNumber(indicator.start) ? indicator.start : xAxis.max,
-        end = isNumber(indicator.end) ? indicator.end : xAxis.max,
-        x1 = xAxis.translate(start, 0, 0, 0, 1),
-        x2 = xAxis.translate(end, 0, 0, 0, 1),
-        plotY = params.yAxis.translate(indicator.y, 0, 1, 0, 1),
-        y1 = plotY,
-        y2 = plotY + metrics.width / 2,
-        graphic = indicator.graphic,
-        animate = {},
-        attr = {
-            fill: '#ff0000'
-        };
-
-    // Create the graphic if new, or update the already existing graphic.
-    if (!graphic) {
-        indicator.graphic = graphic = params.renderer
-            .rect(x1, y1, x2 - x1, y2 - y1)
-            .add(params.group);
-    } else {
-        animate.x = x1;
-        animate.y = y1;
-        animate.width = x2 - x1;
-        animate.height = y2 - y1;
-    }
-    graphic.attr(attr).animate(animate, undefined, undefined, true);
-
-    return indicator;
-
-};
-
 var drawSeriesIndicators = function (series) {
     var options = series && series.options,
         indicators = series.indicators || options && options.indicators || [],
         mapOfDrawFunctions = {
-            heat: drawHeatIndicator,
             line: drawIndicator
         },
         fn = function (indicator) {
@@ -595,9 +559,9 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                 newPoints.forEach(function (newPoint) {
                     var oldPoint = newPoint.oldPoint;
 
-                    if (oldPoint.heatIndicator.graphic) {
-                        oldPoint.heatIndicator.graphic =
-                            oldPoint.heatIndicator.graphic.destroy();
+                    if (oldPoint.heatIndicator) {
+                        oldPoint.heatIndicator =
+                            oldPoint.heatIndicator.destroy();
                     }
 
                     newPoint.oldPoint = oldPoint = oldPoint.remove(false);
@@ -871,50 +835,9 @@ var onSeriesClick = function (event) {
     ].join('');
 };
 
-var calculateSeriesIdleTime = function (series) {
-    var points = series.points
-        .slice() // Make a copy before sorting.
-        .sort(function (a, b) {
-            return b.start - a.start;
-        }),
-        xAxis = series.xAxis,
-        min = xAxis.min,
-        firstPoint = points[points.length - 1].start,
-        totalIdle = firstPoint > min ? firstPoint - min : 0,
-        max = xAxis.max;
-
-    reduce(points, function (next, current) {
-        var start = Math.max(current.end, min),
-            end = next ? Math.min(next.start, max) : max,
-            idle = (start < end) ? end - start : 0;
-        current.idle = idle;
-        totalIdle += idle;
-        return current;
-    }, undefined);
-    series.idle = totalIdle;
-};
-
 var afterSeriesRender = function () {
-    var series = this,
-        min = series.xAxis.min,
-        fn = function (indicator) {
-            return drawHeatIndicator(indicator, {
-                group: series.group,
-                metrics: series.columnMetrics,
-                xAxis: series.xAxis,
-                yAxis: series.yAxis,
-                renderer: series.chart.renderer
-            });
-        };
-    calculateSeriesIdleTime(series);
-    Highcharts.each(series.points, function (point) {
-        var heatIndicator = point.heatIndicator || {
-            y: point.y
-        };
-        heatIndicator.start = Math.max(point.end, min);
-        heatIndicator.end = heatIndicator.start + point.idle;
-        point.heatIndicator = fn(heatIndicator);
-    });
+    var series = this;
+
     // Draw Earliest Possible Return Indicators
     drawSeriesIndicators(series);
 };
@@ -925,6 +848,15 @@ var xAxisMin = today - (10 * days),
 Highcharts.ganttChart('container', {
     plotOptions: {
         series: {
+            heatIndicator: {
+                enabled: true,
+                filter: function (indicator) {
+                    var start = indicator.start,
+                        end = indicator.end,
+                        idleTime = end - start;
+                    return idleTime > (10 * days);
+                }
+            },
             stickyTracking: true,
             events: {
                 afterRender: afterSeriesRender,
