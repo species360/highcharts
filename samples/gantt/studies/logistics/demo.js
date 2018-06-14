@@ -738,21 +738,6 @@ var tooltipFormatter = function () {
     ].join('');
 };
 
-var onSeriesClick = function (event) {
-    var el = document.getElementById('tooltip-info'),
-        point = event.point,
-        vessel = information.vessels.find(function (vessel) {
-            return vessel.name === point.vessel;
-        }),
-        trip = vessel.trips.find(function (trip) {
-            return trip.name === point.trip;
-        });
-    el.innerHTML = [
-        '<p>Vessel: ' + vessel.name + '</p>',
-        'Start: ' + Highcharts.dateFormat(trip.start)
-    ].join('');
-};
-
 var xAxisMin = today - (10 * days),
     xAxisMax = xAxisMin + 90 * days;
 
@@ -769,9 +754,6 @@ Highcharts.ganttChart('container', {
                 }
             },
             stickyTracking: true,
-            events: {
-                click: onSeriesClick
-            },
             point: {
                 events: {
                     mouseOver: onMouseOver,
