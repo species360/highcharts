@@ -224,10 +224,9 @@ var onDropUpdateIndicator = function (params) {
 
 // --- Task resize functionality ----
 
-var showResizeHandles = function () {
-    var renderer = this.series.chart.renderer,
-        point = this,
-        series = this.series,
+var showResizeHandles = function (point) {
+    var renderer = point.series.chart.renderer,
+        series = point.series,
         xAxis = series.xAxis,
         addEvent = Highcharts.addEvent,
         handleAttrs = {
@@ -278,21 +277,21 @@ var showResizeHandles = function () {
         };
 
     if (
-        !this.isDragResizing &&
-        !this.isAnimating &&
-        !this.overResizeHandle
+        !point.isDragResizing && // Don't show again if we already resizing
+        !point.isAnimating && // Don't show if we are animating the point
+        !point.overResizeHandle // Don't show again if we are hovering handle
     ) {
-        this.isDragResizing = true;
-        if (!this.dragResizeHandles) {
+        point.isDragResizing = true;
+        if (!point.dragResizeHandles) {
             // Create handles if they don't exist
-            this.dragResizeHandles = renderer.g().add(this.graphic.parentGroup);
-            this.rightResizeHandle = renderer.path(getHandlePath())
-                .attr(handleAttrs).css(handleCss).add(this.dragResizeHandles);
-            this.leftResizeHandle = renderer.path(getHandlePath(true))
-                .attr(handleAttrs).css(handleCss).add(this.dragResizeHandles);
+            point.dragResizeHandles = renderer.g().add(point.graphic.parentGroup);
+            point.rightResizeHandle = renderer.path(getHandlePath())
+                .attr(handleAttrs).css(handleCss).add(point.dragResizeHandles);
+            point.leftResizeHandle = renderer.path(getHandlePath(true))
+                .attr(handleAttrs).css(handleCss).add(point.dragResizeHandles);
 
             // Add event handlers
-            [this.rightResizeHandle, this.leftResizeHandle].forEach(
+            [point.rightResizeHandle, point.leftResizeHandle].forEach(
                 function (handle, i) {
                     addEvent(handle.element, 'mouseover', function () {
                         point.overResizeHandle = true;
@@ -367,22 +366,32 @@ var showResizeHandles = function () {
             });
         } else {
             // Update handle location if already exists
-            this.rightResizeHandle.attr({
+            point.rightResizeHandle.attr({
                 d: getHandlePath()
             }).translate(0, 0);
-            this.leftResizeHandle.attr({
+            point.leftResizeHandle.attr({
                 d: getHandlePath(true)
             }).translate(0, 0);
         }
-        this.dragResizeHandles.show();
+        point.dragResizeHandles.show();
     }
 };
 
-var hideResizeHandles = function () {
-    if (this.dragResizeHandles) {
-        this.dragResizeHandles.hide();
-        delete this.isDragResizing;
+var hideResizeHandles = function (point) {
+    if (point.dragResizeHandles) {
+        point.dragResizeHandles.hide();
+        delete point.isDragResizing;
     }
+};
+
+var onMouseOver = function () {
+    var point = this;
+    showResizeHandles(point);
+};
+
+var onMouseOut = function () {
+    var point = this;
+    hideResizeHandles(point);
 };
 
 // --- Drag/drop functionality ----
@@ -526,18 +535,16 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                 return;
             }
 
-            // Define the new points
+            // Define options for the the new points
             deltaX = dragPoint.newX - dragPoint.start;
             newPoints = oldSeries.points.reduce(function (acc, cur) {
-                var point;
                 // Only add points from the same series with the same trip name
                 if (cur.trip === trip) {
-                    point = {
+                    var point = {
                         start: cur.start + deltaX,
                         end: cur.end + deltaX,
                         y: dragPoint.newY,
-                        oldPoint: cur,
-                        hovering: cur === dragPoint
+                        oldPoint: cur
                     };
                     // Copy over data from old point
                     [
@@ -552,7 +559,7 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
             }, []);
 
             // Hide resize lines if on
-            hideResizeHandles.call(chart.dragPoint);
+            hideResizeHandles(chart.dragPoint);
 
             // Update the point
             if (newSeries !== oldSeries) {
@@ -567,30 +574,27 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                     newPoint.oldPoint = oldPoint = oldPoint.remove(false);
                     delete newPoint.oldPoint;
                     newSeries.addPoint(newPoint, false);
-                    if (newPoint.hovering) {
-                        showResizeHandles.call(newSeries.points[
-                            newSeries.points.length - 1
-                        ]);
-                        delete newPoint.hovering;
-                    }
                 });
-                // TODO series.addPoint is not adding point to series.points
+
+                // Workaround to add new points to series.points, as this is not
+                // done automatically by addPoint.
                 newSeries.generatePoints();
             } else {
-                // Use point.update if series is the same
+                // Use point.update if series is the same.
+                // Make sure we don't allow resize handles on hover while
+                // animating, so add a flag for that.
                 newPoints.forEach(function (newPoint) {
                     var old = newPoint.oldPoint;
                     delete newPoint.oldPoint;
-
-
-                    old.update(newPoint, false, false);
-                    // Keep track of whether or not we are animating the point,
-                    // so that we don't draw resize handles on a moving point.
-
-
+                    old.isAnimating = true;
+                    old.update(newPoint, true, {
+                        duration: 300
+                    });
+                    // Complete runs too fast (bug?), so set a timeout instead
+                    setTimeout(function () {
+                        delete old.isAnimating;
+                    }, 310);
                 });
-                // Show resize handles after animating all points
-
             }
 
             // Update the indicator for the group
@@ -602,12 +606,15 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                 y: newY
             });
 
-            // Call chart redraw to update the visual positions of the points
-            // and indicators
-            newSeries.chart.redraw();
+            // Call chart redraw to update the indicators
+            newSeries.chart.redraw({
+                duration: 300
+            });
+
+            // Show handles again after animating
             setTimeout(function () {
-            //    showResizeHandles.call(chart.hoverPoint);
-            }, 300);
+                chart.hoverPoint.firePointEvent('mouseOver');
+            }, 310);
         }
 
         // Always reset on mouseup
@@ -864,8 +871,8 @@ Highcharts.ganttChart('container', {
             },
             point: {
                 events: {
-                    mouseOver: showResizeHandles,
-                    mouseOut: hideResizeHandles
+                    mouseOver: onMouseOver,
+                    mouseOut: onMouseOut
                 }
             },
             cursor: 'move',
