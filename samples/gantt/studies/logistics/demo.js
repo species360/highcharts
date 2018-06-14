@@ -82,6 +82,7 @@ var information = {
     }]
 };
 var find = Highcharts.find,
+    each = Highcharts.each,
     dragGuideBox = {
         default: {
             'stroke-width': 1,
@@ -146,9 +147,14 @@ var isColliding = function (point, chart) {
 
 // --- Task resize functionality ----
 
+/*
+    Todo: Should be a module (chart.pointResizer), only one set of handles at a
+        time.
+*/
 var showResizeHandles = function (point) {
     var renderer = point.series.chart.renderer,
         series = point.series,
+        chart = series.chart,
         xAxis = series.xAxis,
         addEvent = Highcharts.addEvent,
         handleAttrs = {
@@ -177,14 +183,29 @@ var showResizeHandles = function (point) {
                 'L', centerX, bottom
             ];
         },
-        resizeCollides = function (point, newX) {
+        resizeCollides = function (point, newX, margin) {
             var points = point.series.points,
                 i = points.length,
                 within = function (p, x) {
-                    return x >= p.x - 1 && x <= p.x2 + 1;
-                };
+                    return x >= p.x - margin && x <= p.x2 + margin;
+                },
+                adjoinedPointLeft = find(points, function (p) {
+                    return p !== point &&
+                        p.trip === point.trip &&
+                        p.end === point.start;
+                }),
+                adjoinedPointRight = find(points, function (p) {
+                    return p !== point &&
+                        p.trip === point.trip &&
+                        p.start === point.end;
+                });
             while (i--) {
-                if (points[i] !== point && within(points[i], newX)) {
+                if (
+                    points[i] !== point &&
+                    points[i] !== adjoinedPointLeft &&
+                    points[i] !== adjoinedPointRight &&
+                    within(points[i], newX)
+                ) {
                     return true;
                 }
             }
@@ -192,11 +213,10 @@ var showResizeHandles = function (point) {
         };
 
     if (
-        !point.isDragResizing && // Don't show again if we already resizing
+        !chart.resizeHandles && // Don't show again if we already resizing
         !point.isAnimating && // Don't show if we are animating the point
         !point.overResizeHandle // Don't show again if we are hovering handle
     ) {
-        point.isDragResizing = true;
         if (!point.dragResizeHandles) {
             // Create handles if they don't exist
             point.dragResizeHandles = renderer.g().add(point.graphic.parentGroup);
@@ -215,12 +235,12 @@ var showResizeHandles = function (point) {
                         delete point.overResizeHandle;
                     });
                     addEvent(handle.element, 'mousedown', function (e) {
-                        var linkedPoint = series.points.find(function (p) {
+                        var linkedPoints = series.points.filter(function (p) {
                             return i ?
-                                // Left handle - look for point with x2 === x
-                                p.x2 === point.x :
-                                // Right handle
-                                p.x === point.x2;
+                                // Left handle - look for earlier points
+                                p.trip === point.trip && p.x2 <= point.x :
+                                // Right handle - look for later points
+                                p.trip === point.trip && p.x >= point.x2;
                         });
                         point.resizeStart = {
                             pageX: e.pageX,
@@ -230,8 +250,10 @@ var showResizeHandles = function (point) {
                             )),
                             handle: i ? 'left' : 'right',
                             translateX: handle.attr('translateX'),
-                            linkedPoint: linkedPoint
+                            linkedPoints: linkedPoints
                         };
+                        point.dragResizeHandles.hide(); // Hide while dragging
+                        chart.isDragResizing = true;
                         e.preventDefault();
                         e.stopPropagation();
                     });
@@ -240,18 +262,46 @@ var showResizeHandles = function (point) {
                 var resizeData = point.resizeStart;
                 if (resizeData) {
                     var newPoint = Highcharts.extend({}, point.options),
+                        linkedPoints = resizeData.linkedPoints,
                         newLinkedPoint,
-                        deltaX = e.pageX - resizeData.pageX,
+                        deltaPageX = e.pageX - resizeData.pageX,
                         newX = Math.round(xAxis.toValue(
-                            resizeData.plotX + deltaX, true
+                            resizeData.plotX + deltaPageX, true
                         )),
                         left = resizeData.handle === 'left',
+                        deltaX = newX - (left ? point.x : point.x2),
                         handle = point[
                             left ? 'leftResizeHandle' : 'rightResizeHandle'
-                        ];
+                        ],
 
-                    if (resizeCollides(point, newX)) {
-                        delete point.resizeStart;
+                        // Margins for collision detection
+                        collisionMargin = 0.2, // Percent of axis size
+                        collisionPxMargin = (xAxis.max - xAxis.min) *
+                            collisionMargin / 100,
+
+                        // Point in group with most extreme x/x2
+                        collidePoint = linkedPoints && linkedPoints.reduce(
+                            function (acc, cur) {
+                                return (left ?
+                                    cur.x < acc.x : // This point lower
+                                    cur.x2 > acc.x2 // This point higher
+                                ) ? cur : acc;
+                            }, point
+                        ) || point,
+
+                        // New x/x2 for collidePoint
+                        collideX = collidePoint[left ? 'x' : 'x2'] + deltaX;
+
+
+                    // Don't allow if we collide, or are resizing max to be
+                    // smaller than min or vice versa.
+                    if (
+                        (newX <= point.x + collisionPxMargin && !left) ||
+                        (newX >= point.x2 - collisionPxMargin && left) ||
+                        resizeCollides(
+                            collidePoint, collideX, collisionPxMargin
+                        )
+                    ) {
                         return;
                     }
 
@@ -261,22 +311,32 @@ var showResizeHandles = function (point) {
 
                     point.update(newPoint, true, false);
 
-                    if (resizeData.linkedPoint) {
-                        newLinkedPoint = Highcharts.extend(
-                            {}, resizeData.linkedPoint.options
-                        );
-                        newLinkedPoint[left ? 'x2' : 'x'] =
-                            newLinkedPoint[left ? 'end' : 'start'] =
-                            newX;
-                        resizeData.linkedPoint.update(
-                            newLinkedPoint, true, false
-                        );
+                    if (resizeData.linkedPoints) {
+                        each(resizeData.linkedPoints, function (linkedPoint) {
+                            newLinkedPoint = Highcharts.extend(
+                                {}, linkedPoint.options
+                            );
+                            newLinkedPoint.x = newLinkedPoint.start =
+                                newLinkedPoint.x + deltaX;
+                            newLinkedPoint.x2 = newLinkedPoint.end =
+                                newLinkedPoint.x2 + deltaX;
+                            linkedPoint.update(
+                                newLinkedPoint, true, false
+                            );
+                        });
                     }
 
-                    handle.translate(resizeData.translateX + deltaX, 0);
+                    handle.translate(resizeData.translateX + deltaPageX, 0);
                 }
             });
             addEvent(document, 'mouseup', function () {
+                // Show the handles again on mouseup
+                if (chart.isDragResizing) {
+                    chart.resizeHandles.show();
+                }
+                delete chart.isDragResizing;
+
+                // Reset resize
                 delete point.resizeStart;
             });
         } else {
@@ -289,24 +349,30 @@ var showResizeHandles = function (point) {
             }).translate(0, 0);
         }
         point.dragResizeHandles.show();
+        chart.resizeHandles = point.dragResizeHandles;
     }
 };
 
 var hideResizeHandles = function (point) {
-    if (point.dragResizeHandles) {
-        point.dragResizeHandles.hide();
-        delete point.isDragResizing;
+    var chart = point.series.chart;
+    if (!chart.isDragResizing && chart.resizeHandles) {
+        chart.resizeHandles.hide();
+        delete chart.resizeHandles;
     }
 };
 
 var onMouseOver = function () {
     var point = this;
-    showResizeHandles(point);
+    if (point.enableResize) {
+        showResizeHandles(point);
+    }
 };
 
 var onMouseOut = function () {
     var point = this;
-    hideResizeHandles(point);
+    if (point.enableResize) {
+        hideResizeHandles(point);
+    }
 };
 
 // --- Drag/drop functionality ----
@@ -518,7 +584,9 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
             // and indicators
             newSeries.chart.redraw();
             setTimeout(function () {
-                chart.hoverPoint.firePointEvent('mouseOver');
+                if (chart.hoverPoint) {
+                    chart.hoverPoint.firePointEvent('mouseOver');
+                }
             }, 310);
         }
 
@@ -574,7 +642,8 @@ var getPoint = function (params) {
         type: type,
         startPort: startPort,
         endPort: endPort,
-        name: trip.name
+        name: trip.name,
+        enableResize: type === 'ladenVoyage' || type === 'ballastVoyage'
     };
 };
 
