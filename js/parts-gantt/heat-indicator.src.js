@@ -165,9 +165,8 @@ var calculateSeriesIdleTime = function (series) {
     series.idle = totalIdle;
 };
 
-var onSeriesAfterRender = function () {
-    var series = this,
-        options = series.options && series.options.heatIndicator || {};
+var renderHeatIndicators = function (series) {
+    var options = series.options && series.options.heatIndicator || {};
 
     // TODO Several modules are dependent upon this, it should be added as a
     // dependency somehow.
@@ -196,4 +195,4 @@ var onSeriesAfterRender = function () {
     });
 };
 
-export default onSeriesAfterRender;
+export default renderHeatIndicators;

@@ -67,7 +67,7 @@ var information = {
             ladenVoyage: 21 * days,
             unloading: 1 * days + 5 * hours,
             ballastVoyage: 14 * days,
-            earliestPossibleReturn: 30 * days
+            earliestPossibleReturn: (today - 5 * days) + 30 * days
         }, {
             name: 'Contract 4',
             startPort: 'USGLS',
@@ -142,84 +142,6 @@ var isColliding = function (point, chart) {
 
         return p.trip === point.trip ? false : isRectanglesIntersecting(r1, r2);
     });
-};
-
-var drawIndicator = function (indicator, params) {
-    var metrics = params.metrics,
-        plotX = params.xAxis.translate(indicator.x, 0, 0, 0, 1),
-        plotY = params.yAxis.translate(indicator.y, 0, 1, 0, 1),
-        x1 = plotX,
-        x2 = plotX,
-        y1 = plotY - metrics.width / 2,
-        y2 = plotY + metrics.width / 2,
-        graphic = indicator.graphic,
-        lineWidth = 1,
-        animate = {},
-        attr = {
-            stroke: '#ff0000',
-            'stroke-width': lineWidth,
-            dashstyle: 'dash'
-        },
-        path = params.renderer.crispLine(['M', x1, y1, 'L', x2, y2], lineWidth);
-
-    // Create the graphic if new, or update the already existing graphic.
-    if (!graphic) {
-        indicator.graphic = graphic = params.renderer.path(path)
-            .add(params.group);
-    } else {
-        animate.d = path;
-    }
-    graphic.attr(attr).animate(animate, undefined, undefined, true);
-
-    return indicator;
-};
-
-var drawSeriesIndicators = function (series) {
-    var options = series && series.options,
-        indicators = series.indicators || options && options.indicators || [],
-        mapOfDrawFunctions = {
-            line: drawIndicator
-        },
-        fn = function (indicator) {
-            var draw = mapOfDrawFunctions[indicator.type];
-            return draw(indicator, {
-                group: series.group,
-                metrics: series.columnMetrics,
-                xAxis: series.xAxis,
-                yAxis: series.yAxis,
-                renderer: series.chart.renderer
-            });
-        };
-    series.indicators = Highcharts.map(indicators, fn);
-};
-
-var onDropUpdateIndicator = function (params) {
-    var newSeries = params.newSeries,
-        oldSeries = params.oldSeries,
-        trip = params.trip,
-        y = params.y,
-        deltaX = params.deltaX,
-        indicator,
-        indicatorIndex;
-
-    // Find the indicator belonging to the given group.
-    indicator = oldSeries.indicators.find(function (indicator, index) {
-        indicatorIndex = index;
-        return indicator.trip === trip;
-    });
-
-    if (indicator) {
-        indicator.x += deltaX;
-        indicator.y = y;
-        if (newSeries !== oldSeries) {
-            // Remove the indicator from the old series
-            oldSeries.indicators.splice(indicatorIndex, 1);
-            // Add the indicator to its new series
-            newSeries.indicators.push(indicator);
-            // Destroy the indicator graphic to avoid animation.
-            indicator.graphic = indicator.graphic.destroy();
-        }
-    }
 };
 
 // --- Task resize functionality ----
@@ -496,7 +418,6 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
             deltaX,
             dragPoint = chart.dragPoint,
             trip,
-            newY,
             oldSeries,
             reset = function () {
                 // Remove guide box
@@ -525,7 +446,6 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
             // Collect some values from dragPoint
             oldSeries = dragPoint.series;
             trip = dragPoint.trip;
-            newY = dragPoint.newY;
 
             // Find series the points should belong to.
             // Series have y value as ID, making it easy to map between them.
@@ -549,7 +469,7 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                     // Copy over data from old point
                     [
                         'color', 'vessel', 'trip', 'type', 'startPort',
-                        'endPort', 'name'
+                        'endPort', 'name', 'indicator'
                     ].forEach(function (prop) {
                         point[prop] = cur[prop];
                     });
@@ -569,6 +489,10 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                     if (oldPoint.heatIndicator) {
                         oldPoint.heatIndicator =
                             oldPoint.heatIndicator.destroy();
+                    }
+                    if (oldPoint.indicatorObj) {
+                        oldPoint.indicatorObj =
+                            oldPoint.indicatorObj.destroy();
                     }
 
                     newPoint.oldPoint = oldPoint = oldPoint.remove(false);
@@ -597,21 +521,9 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                 });
             }
 
-            // Update the indicator for the group
-            onDropUpdateIndicator({
-                deltaX: deltaX,
-                newSeries: newSeries,
-                oldSeries: oldSeries,
-                trip: trip,
-                y: newY
-            });
-
-            // Call chart redraw to update the indicators
-            newSeries.chart.redraw({
-                duration: 300
-            });
-
-            // Show handles again after animating
+            // Call chart redraw to update the visual positions of the points
+            // and indicators
+            newSeries.chart.redraw();
             setTimeout(function () {
                 chart.hoverPoint.firePointEvent('mouseOver');
             }, 310);
@@ -637,6 +549,8 @@ var getPoint = function (params) {
         type = params.type,
         vessel = params.vessel,
         duration = trip[type],
+        indicator,
+        earliestPossibleReturn = trip.earliestPossibleReturn,
         end = start + duration,
         startPort = type === 'ladenVoyage' ?
             trip.startPort : (
@@ -646,11 +560,22 @@ var getPoint = function (params) {
             trip.midPort : (
                 type === 'ballastVoyage' ? trip.endPort : null
             );
+
+    indicator = (
+        (start < earliestPossibleReturn && earliestPossibleReturn < end) ?
+        {
+            enabled: true,
+            x: earliestPossibleReturn - start
+        } :
+        undefined
+    );
+
     return {
         start: start,
         end: end,
         color: style.color,
         vessel: vessel.name,
+        indicator: indicator,
         trip: trip.name,
         y: params.y,
         type: type,
@@ -695,28 +620,17 @@ var getSeriesFromInformation = function (info) {
         var info = vessel.trips.reduce(function (result, trip) {
             var group = getGroupFromTrip(trip, events, vessel, i);
 
-            if (trip.earliestPossibleReturn) {
-                result.indicators.push({
-                    type: 'line',
-                    x: trip.start + trip.earliestPossibleReturn,
-                    y: i,
-                    trip: trip.name
-                });
-            }
-
             result.groups.push(group);
             result.data = result.data.concat(group.points);
             return result;
         }, {
             data: [],
-            groups: [],
-            indicators: []
+            groups: []
         });
 
         series.push({
             name: vessel.name,
             data: info.data,
-            indicators: info.indicators,
             id: i
         });
         return series;
@@ -809,10 +723,7 @@ var tooltipFormatter = function () {
                 ].join('');
             },
             'ballastVoyage': function (point) {
-                var series = point.series,
-                    indicator = find(series.indicators, function (indicator) {
-                        return indicator.trip === point.trip;
-                    });
+                var indicator = point.indicatorObj;
                 return [
                     '<b>Ballast Voyage</b><br/>',
                     'Start: (' + point.startPort + ') ' + dateFormat(point.start) + '<br/>',
@@ -842,13 +753,6 @@ var onSeriesClick = function (event) {
     ].join('');
 };
 
-var afterSeriesRender = function () {
-    var series = this;
-
-    // Draw Earliest Possible Return Indicators
-    drawSeriesIndicators(series);
-};
-
 var xAxisMin = today - (10 * days),
     xAxisMax = xAxisMin + 90 * days;
 
@@ -866,7 +770,6 @@ Highcharts.ganttChart('container', {
             },
             stickyTracking: true,
             events: {
-                afterRender: afterSeriesRender,
                 click: onSeriesClick
             },
             point: {
