@@ -1,5 +1,5 @@
 import Highcharts from '../../parts/Globals.js';
-import renderHeatIndicators from '../../parts-gantt/heat-indicator.src.js';
+import renderHeatIndicators from '../../parts-gantt/heat-indicator.js';
 import renderEPRIndicators from '../../parts-gantt/epr-indicator.js';
 var Series = Highcharts.Series;
 
