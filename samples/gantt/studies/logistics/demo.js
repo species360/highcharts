@@ -153,35 +153,28 @@ var showResizeHandles = function (point) {
         addEvent = Highcharts.addEvent,
         handleAttrs = {
             strokeWidth: 2,
-            fill: 'rgba(170, 170, 170, 0.6)'
+            fill: 'rgb(255, 255, 255)'
         },
         handleCss = {
-            stroke: '#444',
+            stroke: 'rgba(0, 0, 0, 0.6)',
             cursor: 'ew-resize'
         },
         getHandlePath = function (left) {
             var bBox = point.graphic.getBBox(),
-                edge = left ? bBox.x : bBox.x + bBox.width;
+                centerX = left ? bBox.x : bBox.x + bBox.width,
+                top = bBox.y,
+                bottom = top + bBox.height,
+                centerY = bBox.y + (bBox.height / 2);
             return [
                 // Top wick
-                'M', edge, bBox.y,
-                'L', edge, bBox.y + bBox.height / 3,
+                'M', centerX, top,
+                'L', centerX, centerY - 5,
                 // Box
-                'L', edge + 2, bBox.y + bBox.height / 3,
-                'L', edge + 2, bBox.y + bBox.height / 3 * 2,
-                'L', edge - 2, bBox.y + bBox.height / 3 * 2,
-                'L', edge - 2, bBox.y + bBox.height / 3,
-                'L', edge, bBox.y + bBox.height / 3,
+                'A', 1, 1, 0, 0, 0, centerX, centerY + 5,
+                'A', 1, 1, 0, 0, 0, centerX, centerY - 5,
                 // Bottom wick
-                'M', edge, bBox.y + bBox.height / 3 * 2,
-                'L', edge, bBox.y + bBox.height,
-                // Grip lines
-                'M', edge - 1, bBox.y + bBox.height / 12 * 5,
-                'L', edge + 1, bBox.y + bBox.height / 12 * 5,
-                'M', edge - 1, bBox.y + bBox.height / 2,
-                'L', edge + 1, bBox.y + bBox.height / 2,
-                'M', edge - 1, bBox.y + bBox.height / 12 * 7,
-                'L', edge + 1, bBox.y + bBox.height / 12 * 7
+                'M', centerX, centerY + 5,
+                'L', centerX, bottom
             ];
         },
         resizeCollides = function (point, newX) {
