@@ -528,7 +528,7 @@ Highcharts.Chart.prototype.callbacks.push(function (chart) {
                     // Copy over data from old point
                     [
                         'color', 'vessel', 'trip', 'type', 'startPort',
-                        'endPort', 'name', 'indicator'
+                        'endPort', 'name', 'indicator', 'enableResize'
                     ].forEach(function (prop) {
                         point[prop] = cur[prop];
                     });
