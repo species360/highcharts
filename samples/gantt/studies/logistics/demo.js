@@ -370,7 +370,7 @@ var onMouseOver = function () {
 
 var onMouseOut = function () {
     var point = this;
-    if (point.enableResize) {
+    if (point.series.chart.resizeHandles) {
         hideResizeHandles(point);
     }
 };
