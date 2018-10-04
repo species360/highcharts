@@ -906,7 +906,7 @@ extend(Chart.prototype, /** @lends Highcharts.Chart.prototype */ {
             .replace(/ (|NS[0-9]+\:)href=/g, ' xlink:href=') // #3567
             .replace(/\n/, ' ')
             // Any HTML added to the container after the SVG (#894)
-            .replace(/<\/svg>.*?$/, '</svg>')
+            .replace(/<\/svg>(?!.*<\/svg>).*$/, '</svg>')
             // Batik doesn't support rgba fills and strokes (#3095)
             .replace(
                 /(fill|stroke)="rgba\(([ 0-9]+,[ 0-9]+,[ 0-9]+),([ 0-9\.]+)\)"/g, // eslint-disable-line max-len
